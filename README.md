@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://miro.com/app/board/uXjVGANasYQ=/?share_link_id=650681616162" target="blank"><img src="./public/images/logo.png" width="480" alt="FetchDB Logo" /></a>
+  <a href="https://miro.com/app/board/uXjVGANasYQ=/?share_link_id=650681616162" target="blank"><img src="./public/images/logo.png" width="240" alt="FetchDB Logo" /></a>
 </p>
 
 ## Project setup
