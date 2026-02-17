@@ -1,0 +1,15 @@
+export type conditionalOperatorsType =
+  | '<>'
+  | '!='
+  | '='
+  | '<'
+  | '>'
+  | '<='
+  | '>='
+  | 'is null'
+  | 'is not null'
+  | 'in'
+  | 'exists'
+  | 'and'
+  | 'or'
+  | 'not';

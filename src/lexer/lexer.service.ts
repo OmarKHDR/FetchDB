@@ -4,10 +4,10 @@ import { Injectable } from '@nestjs/common';
 export class LexerService {
   singleCharacterTokens: Array<string>;
   constructor() {
-    this.singleCharacterTokens = [',', '(', ')'];
+    this.singleCharacterTokens = [',', '(', ')', '<', '>', '=', ';'];
   }
 
-  isSingleQuoteCharacter(c: string): boolean {
+  isSingleCharacterToken(c: string): boolean {
     for (const char of this.singleCharacterTokens) {
       if (char === c) return true;
     }
@@ -16,24 +16,29 @@ export class LexerService {
 
   tokinize(statement: string): Array<string> {
     const tokensArray: Array<string> = [];
-    let tokenEnd: boolean = false;
     let buffer: string = '';
+    let isSingleQouted = false;
     for (const token of statement) {
-      if (!token.trim()) {
-        tokenEnd = true;
-      } else if (this.isSingleQuoteCharacter(token)) {
+      //if token is white space, check if there is a token on buffer and flush it
+      if (!token.trim() && !isSingleQouted) {
         if (buffer) tokensArray.push(buffer);
+        buffer = '';
+        continue;
+      }
+
+      //if single character token we add the flush buffer if exists, then add that token
+      if (this.isSingleCharacterToken(token)) {
+        if (buffer) tokensArray.push(buffer);
+        buffer = '';
         tokensArray.push(token);
-        buffer = '';
-        tokenEnd = true;
-      } else {
-        buffer = buffer + token;
-        tokenEnd = false;
+        continue;
       }
-      if (tokenEnd && buffer) {
-        tokensArray.push(buffer);
-        buffer = '';
+
+      if (token === "'") {
+        isSingleQouted = !isSingleQouted;
       }
+
+      buffer += token;
     }
     if (buffer) tokensArray.push(buffer);
     console.log(tokensArray);

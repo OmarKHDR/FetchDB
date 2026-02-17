@@ -1,10 +1,12 @@
-import { Injectable } from '@nestjs/common';
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import path from 'path';
 import fs from 'fs/promises';
 import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
-import { PathLike } from 'fs';
 import { Schame } from 'src/shared/types/db.schema.types';
-//creating something would return 1 if it was already existing and 0 if it was created "to be convinient at future"
+import { Injectable } from '@nestjs/common';
+
+//creating something would return 1 if it was already existing and 0
+//if it was created "to be convinient at future"
 @Injectable()
 export class DbCreatorService {
   private readonly rootDir: string = path.join(process.cwd(), 'data');

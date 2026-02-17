@@ -36,14 +36,16 @@ describe('LexerService', () => {
 
   it('tokenization tests: using pranthesis', () => {
     expect(
-      service.tokinize("INSERT INTO users values ('omar', 22, 15000.00)"),
+      service.tokinize(
+        "INSERT INTO users values ('omar khaled', 22, 15000.00)",
+      ),
     ).toEqual([
       'INSERT',
       'INTO',
       'users',
       'values',
       '(',
-      "'omar'",
+      "'omar khaled'",
       ',',
       '22',
       ',',
