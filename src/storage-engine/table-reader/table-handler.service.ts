@@ -3,7 +3,8 @@ import { Column, Type } from '../types/column.type';
 import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
 
 // table data is
-// [rowindex]|[data]|[data]|[data]|[prevVersion][deletedbyte]
+// assuming pk is always at the begining and is a serial
+// [pk-serial]|[data]|[data]|[data]|[prevVersion][deletedbyte]
 @Injectable()
 export class TableHandlerService {
   constructor(private winston: WinstonLoggerService) {}
@@ -20,8 +21,8 @@ export class TableHandlerService {
       };
     result['prevVersion'] = buffer.readBigUInt64LE(bytesRead - 9);
     let cellStart = 0;
-    result['internalRowId'] = this.__getDataByType(buffer, 0, 8, 'SERIAL');
-    cellStart = 9;
+    // result['internalRowId'] = this.__getDataByType(buffer, 0, 8, 'SERIAL');
+    // cellStart = 9;
     for (const column of obj) {
       const cellEnd = buffer.indexOf(0x7c, cellStart);
       if (cellEnd === cellStart) {
@@ -76,15 +77,14 @@ export class TableHandlerService {
   }
 
   dataToTableBuffer(
-    rowId: bigint,
     data: Record<string, string>,
     obj: Column[],
     prevVersion?: bigint,
   ) {
     const result: Buffer[] = [];
-    result.push(this.__getBufferByType(rowId.toString(), 'SERIAL' as Type));
     for (const column of obj) {
       if (data[column.name]) {
+        //assuming any column would begin with a serial pk
         result.push(this.__getBufferByType(data[column.name], column.type));
       }
       result.push(Buffer.from(String('|'), 'utf-8'));
@@ -106,8 +106,9 @@ export class TableHandlerService {
   indexReader(bufferObj: { buffer: Buffer; bytesRead: number }) {
     const { buffer } = bufferObj;
     const index = {};
-    index['internalRowId'] = buffer.readBigInt64LE(0);
-    index['offset'] = buffer.readBigInt64LE(9);
+    //why would we need to write the id if its already calculated by the pk * 8bytes
+    // index['internalRowId'] = buffer.readBigInt64LE(0);
+    index['offset'] = buffer.readBigInt64LE(0);
     return index;
   }
 }
