@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import { DbHandlerService } from '../db-handler/db-handler.service';
 import { Column } from '../types/column.type';
 import path from 'path';
-import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
+import { WinstonLoggerService } from '../../winston-logger/winston-logger.service';
 
 @Injectable()
 export class FileHandlerService {
@@ -68,7 +68,8 @@ export class FileHandlerService {
   }
 
   async __readSchemaFile() {
-    const tablenames = await this.schemaHandler.readFile({ encoding: 'utf-8' });
+    const tablenames =
+      (await this.schemaHandler.readFile({ encoding: 'utf-8' })) || '{}';
     return JSON.parse(tablenames) as Record<string, Column[]>;
   }
 

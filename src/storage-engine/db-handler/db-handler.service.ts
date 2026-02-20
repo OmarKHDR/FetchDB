@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import path from 'path';
 import fs from 'fs/promises';
-import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
+import { WinstonLoggerService } from '../../winston-logger/winston-logger.service';
 import { Injectable } from '@nestjs/common';
 
 @Injectable()
