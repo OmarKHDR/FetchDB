@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Column, Type } from '../types/column.type';
-import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
+import { WinstonLoggerService } from '../../winston-logger/winston-logger.service';
 
 // table data is
 // assuming pk is always at the begining and is a serial
