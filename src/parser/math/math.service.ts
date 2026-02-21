@@ -55,7 +55,7 @@ export class MathService {
         throw new Error(`Syntax Error: unknow operator ${op}`);
       if (this.operators[op] <= maxPriority) break; //impossible at first itiration
       this.eat(state);
-      rhs = this.parseExpression(state, this.operators[op] + 1);
+      rhs = this.parseExpression(state, this.operators[op]);
       lhs = {
         lhs: lhs,
         operator: op,

@@ -18,19 +18,19 @@ describe('MathService', () => {
     expect(service).toBeDefined();
   });
   it('test math parser', () => {
-    expect(
-      service.parseExpression({
-        tokens: ['12', '*', '13', '+', '7'],
-        cursor: 0,
-      }),
-    ).toEqual({
-      lhs: {
-        lhs: '12',
-        operator: '*',
-        rhs: '13',
+    const expr = service.parseExpression({
+      tokens: ['12', '=', '13', '-', '7'],
+      cursor: 0,
+    });
+    console.log(expr);
+    expect(expr).toEqual({
+      lhs: '12',
+      operator: '=',
+      rhs: {
+        lhs: '13',
+        operator: '-',
+        rhs: '7',
       },
-      operator: '+',
-      rhs: '7',
     });
   });
 });
