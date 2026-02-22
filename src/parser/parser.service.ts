@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import {
-  ddl_keywords,
-  dml_keywords,
-  reserved_keywords,
-} from '../shared/constants/keywords.constants';
+import { reserved_keywords } from '../shared/constants/keywords.constants';
+import { MathService } from './math/math.service';
+import type { ExprRes } from './math/math.service';
+import { Column, Type } from '../storage-engine/types/column.type';
+import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
 
 interface tokensParser {
   tokens: string[];
@@ -13,7 +13,10 @@ interface tokensParser {
 @Injectable()
 export class ParserService {
   singleCharacters: Array<string>;
-  constructor() {
+  constructor(
+    private math: MathService,
+    private winston: WinstonLoggerService,
+  ) {
     this.singleCharacters = [',', '(', ')', ';'];
   }
 
@@ -29,15 +32,18 @@ export class ParserService {
     const state = { tokens, cursor: 0 };
     state.tokens = tokens;
     state.cursor = 0;
-
+    if (tokens.at(-1) !== ';') {
+      throw new Error(`Syntax Error: queries must end with ';'`);
+    }
+    this.winston.logger.info(`${tokens.join(' ')}`);
     const statementType = this.peek(state);
     switch (statementType) {
       case 'select':
         return this.__handleSelectStatement(state);
       case 'insert':
         return this.__handleInsertStatement(state);
-      case 'delete':
-        return this.__handleDeleteStatement(state);
+      // case 'delete':
+      //   return this.__handleDeleteStatement(state);
       case 'create':
         return this.__handleCreateStatement(state);
       default:
@@ -77,6 +83,7 @@ export class ParserService {
       result['where'] = this.__handleWhereClause(state);
     //if (this.peek(state) === 'group')
     //result['group'] = this.__handleGroubBy(state);
+    return result;
   }
 
   __handleFromClause(state: tokensParser) {
@@ -94,8 +101,9 @@ export class ParserService {
     return tables;
   }
 
-  __handleWhereClause(state: tokensParser) {
-
+  __handleWhereClause(state: tokensParser): ExprRes | string {
+    this.eat(state);
+    return this.math.parseExpression(state);
   }
 
   __handleInsertStatement(state: tokensParser) {
@@ -165,5 +173,97 @@ export class ParserService {
       }
     }
     return result;
+  }
+
+  // create table users (id serial primary key, ....)
+  __handleCreateStatement(state: tokensParser) {
+    const result: {
+      statement: string;
+      tablename: string;
+      columns: Column[];
+    } = {
+      statement: 'create',
+      tablename: '',
+      columns: [],
+    };
+    this.eat(state);
+    if (this.eat(state) !== 'table') throw new Error('not implemented');
+    result['tablename'] = this.eat(state);
+    result['columns'] = this.__handleColumnDefinition(state);
+    return result;
+  }
+
+  __handleColumnDefinition(state: tokensParser): Column[] {
+    const columns: Column[] = [];
+    if (this.eat(state) !== '(')
+      throw new Error(`Syntax Error: table definition must exist`);
+    while (state.cursor < state.tokens.length) {
+      // each loop is for handling a certain column
+      const token = this.peek(state);
+      if (token === ')') {
+        this.eat(state);
+        break;
+      }
+      if (token === ',') {
+        this.eat(state);
+        continue;
+      }
+      const column: Column = {
+        name: this.eat(state),
+        type: this.eat(state) as Type,
+      };
+      if (column.type === 'VARCHAR') {
+        if (this.eat(state) === '(') {
+          const limit = this.eat(state);
+          if (isNaN(Number(limit)))
+            throw new Error(
+              `Syntax Error: Expected number as a limit for varchar and found ${limit}`,
+            );
+          column.varcharLimint = Number(limit);
+          if (this.eat(state) !== ')')
+            throw new Error(
+              `Syntax Error: Expected closed pranthesis but found ${this.eat(state)}`,
+            );
+        }
+      }
+      column.IsNullable = true;
+      column.IsUnique = false;
+      // search for other column status
+      while (
+        state.cursor < state.tokens.length &&
+        this.peek(state) !== ',' &&
+        this.peek(state) !== ')'
+      ) {
+        const val = this.eat(state);
+        if (val === 'primary') {
+          const pk = this.eat(state);
+          if (pk === 'key') column.IsPK = true;
+          else throw new Error(`Syntax Error: expected KEY found ${pk}`);
+        }
+        if (val === 'not') {
+          const nullable = this.eat(state);
+          if (nullable === 'null') column.IsNullable = false;
+          else throw new Error(`Syntax Error: expected NULL found ${nullable}`);
+        }
+        if (val === 'default') {
+          const defaultVal = this.eat(state);
+          if (['FLOAT', 'SERIAL', 'INT'].includes(column.type)) {
+            if (isNaN(Number(defaultVal))) {
+              throw new Error(
+                `Syntax Error: Expected numeric default for ${column.type}`,
+              );
+            }
+          }
+          if (defaultVal !== ',' && defaultVal !== ')') {
+            column.default = defaultVal;
+          } else
+            throw new Error(
+              `Syntax Error: expected value of type ${column.type} found ${defaultVal}`,
+            );
+        }
+      }
+      columns.push(column);
+    }
+    return columns;
   }
 }

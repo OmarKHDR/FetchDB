@@ -1,11 +1,12 @@
-/* eslint-disable prettier/prettier */
 import { Injectable } from '@nestjs/common';
+import { reserved_keywords } from 'src/shared/constants/keywords.constants';
+import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
 
 type Expression = {
   tokens: Array<string>;
   cursor: number;
 };
-type ExprRes = {
+export type ExprRes = {
   lhs: ExprRes | string;
   operator: string;
   rhs: ExprRes | string;
@@ -14,7 +15,7 @@ type ExprRes = {
 @Injectable()
 export class MathService {
   operators: Record<string, number>;
-  constructor() {
+  constructor(private winston: WinstonLoggerService) {
     this.operators = {
       or: 0,
       and: 1,
@@ -45,11 +46,18 @@ export class MathService {
     state: Expression,
     maxPriority: number = -1,
   ): ExprRes | string {
+    this.winston.logger.info(
+      `recieved logical expression ${state.tokens.slice(state.cursor).join(' ')}`,
+    );
     let lhs = this.__handleLHS(state); // handle the (), not or token and return the value;
     let rhs: ExprRes | string;
     // {lhs: {lhs: 5, op: *, rhs: 6}, op: +, rhs:2}
     // in the opposite {lhs: 5, op: +, rhs: {lhs: 6, op: *, rhs: 6 }}
-    while (state.cursor < state.tokens.length) {
+    while (
+      state.cursor < state.tokens.length &&
+      this.peek(state) != ';' &&
+      !reserved_keywords.includes(this.peek(state))
+    ) {
       const op = this.peek(state);
       if (!(op in this.operators))
         throw new Error(`Syntax Error: unknow operator ${op}`);
