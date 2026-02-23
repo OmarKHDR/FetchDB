@@ -4,85 +4,158 @@ import { DbHandlerService } from '../db-handler/db-handler.service';
 import { Column } from '../types/column.type';
 import path from 'path';
 import { WinstonLoggerService } from '../../winston-logger/winston-logger.service';
+import { MutexService } from '../mutex/mutex.service';
+import { TableHandlerService } from '../table-reader/table-handler.service';
 
 @Injectable()
 export class FileHandlerService {
-  private schemaHandler: fs.FileHandle;
-  private tables: Record<string, [fs.FileHandle, fs.FileHandle]> = {};
+  schemaPath: string;
+  private schemaObj: Record<string, Array<Column>>;
+  private tables: Record<
+    string,
+    { table: fs.FileHandle; index: fs.FileHandle }
+  > = {};
   constructor(
     private dbHandler: DbHandlerService,
+    private tableHandler: TableHandlerService,
     private winston: WinstonLoggerService,
-  ) {}
+    private mutex: MutexService,
+  ) {
+    this.schemaPath = path.join(this.dbHandler.rootDir, 'schema.json');
+  }
 
   async onModuleInit() {
-    const p = path.join(this.dbHandler.rootDir, 'schema.json');
+    this.winston.logger.info(`shcema file already exists`);
     try {
-      this.schemaHandler = await fs.open(p, 'wx+');
-    } catch (err) {
-      if (err.code === 'EEXIST') {
-        this.winston.logger.info(`shcema file already exists`);
-        this.schemaHandler = await fs.open(p, 'r+');
-      } else throw err;
+      await fs.access(this.schemaPath);
+    } catch {
+      await fs.writeFile(this.schemaPath, '{}', 'utf-8');
     }
-    const tablenames = this.__readSchemaFile();
-    for (const table in tablenames) {
-      await this.__createTableFiles(table, 'open+');
+    this.schemaObj = await this.__readSchemaFile();
+    for (const table in this.schemaObj) {
+      this.tables[table] = await this.__openTable(table);
+    }
+  }
+
+  async __openTable(tablename) {
+    const tablePath = path.join(this.dbHandler.rootDir, `${tablename}.data`);
+    const indexPath = path.join(this.dbHandler.rootDir, `${tablename}.index`);
+    const tablefd = await this.createFileIfNotExists(tablePath);
+    const indexfd = await this.createFileIfNotExists(indexPath);
+    if (!tablefd || !indexfd)
+      throw new Error(`couldn't open the table: ${tablename}`);
+    return {
+      table: tablefd,
+      index: indexfd,
+    };
+  }
+  async createFileIfNotExists(filename: string) {
+    try {
+      const filehandler = await fs.open(
+        path.join(this.dbHandler.rootDir, filename),
+        'a+',
+      );
+      return filehandler;
+    } catch (err) {
+      this.winston.logger.error(err);
+      throw err;
     }
   }
 
   async __updateSchema(obj: Record<string, Column[]>) {
     const tables = await this.__readSchemaFile();
+
     for (const table in obj) {
       tables[table] = obj[table];
     }
     const data = JSON.stringify(tables);
+    const resolver = await this.mutex.acquireMutex(this.schemaPath);
     try {
-      await this.schemaHandler.truncate(0);
-      await this.schemaHandler.writeFile(data);
+      const tmpfile = path.join(this.dbHandler.rootDir, 'schema.tmp.json');
+      await fs.writeFile(tmpfile, data);
+      await fs.rename(tmpfile, this.schemaPath);
     } catch (err) {
-      this.winston.logger.error(
-        `this is your schema: ${data}, sorry for deleting your db error: ${err}`,
-      );
-    }
-  }
-  async __createTableFiles(tablename: string, mode: string) {
-    const tablefd = await fs.open(
-      path.join(this.dbHandler.rootDir, `${tablename}.data`),
-      'a+',
-    );
-    const indexfd = await fs.open(
-      path.join(this.dbHandler.rootDir, `${tablename}.index`),
-      'a+',
-    );
-    switch (mode) {
-      case 'create':
-        if (this.tables[tablename]) throw Error(`file already exists`);
-        break;
-      case 'open+':
-        this.tables[tablename] = [tablefd, indexfd];
-        break;
-      default:
-        this.tables[tablename] = [tablefd, indexfd];
-        break;
+      this.winston.logger.error(`this is your schema: ${data} error: ${err}`);
+    } finally {
+      resolver('hello');
     }
   }
 
   async __readSchemaFile() {
-    const tablenames =
-      (await this.schemaHandler.readFile({ encoding: 'utf-8' })) || '{}';
-    return JSON.parse(tablenames) as Record<string, Column[]>;
+    const resolver = await this.mutex.acquireMutex(this.schemaPath);
+    let data: string;
+    try {
+      data = await fs.readFile(this.schemaPath, 'utf-8');
+    } finally {
+      resolver('hi');
+    }
+    return JSON.parse(data || '{}') as Record<string, Column[]>;
   }
 
   async createNewTable(tablename: string, tableSchema: Column[]) {
     const tableObj: Record<string, Column[]> = {};
     tableObj[tablename] = tableSchema;
     try {
-      // open files then add the file descriptors to the tables
-      await this.__createTableFiles(tablename, 'create');
+      this.tables[tablename] = await this.__openTable(tablename);
     } catch (err) {
       throw new Error(`couldn't create table file: ${err}`);
     }
-    //adds those created tables into the schema.json file (rewrite the entire file each time)
     await this.__updateSchema(tableObj);
+  }
+
+  __getTableBuffer(
+    tablename: string,
+    values: Array<string>,
+    columns?: Array<string>,
+  ) {
+    if (!this.tables[tablename])
+      throw new Error(`table ${tablename} doesn't exists`);
+    const row: Record<string, string> = {};
+    if (!columns.length) {
+      if (values.length !== this.schemaObj[tablename].length) {
+        throw new Error(`inserted data doesn't match table schema`);
+      } else {
+        // no names provided for columns and columns matches schema
+        let i = 0;
+        for (const column of this.schemaObj[tablename]) {
+          row[column.name] = values[i++];
+        }
+      }
+    } else {
+      //column names were provided, so we need to loop through columns in schema if the name
+      // matches column name then we add the value, if not then we add the default or throw if its not nullable
+      //assuming in order input with the schema
+      for (const column of this.schemaObj[tablename]) {
+        if (columns.includes(column.name)) {
+          const index = columns.indexOf(column.name);
+          row[column.name] = values[index];
+        } else {
+          // column doesnt exists on the inserted columns ->
+          if (column.default) row[column.name] = column.default;
+          else if (!column.IsNullable) {
+            throw new Error(`value for column ${column.name} must be setten`);
+          } else {
+            row[column.name] = 'null';
+          }
+        }
+      }
+    }
+    return this.tableHandler.dataToTableBuffer(row, this.schemaObj[tablename]);
+  }
+
+  async writeToTable(
+    tablename: string,
+    values: Array<string>,
+    columns?: Array<string>,
+  ) {
+    const buffer = this.__getTableBuffer(tablename, values, columns);
+    const resolver = await this.mutex.acquireMutex(tablename);
+    try {
+      await this.tables[tablename].table.appendFile(buffer);
+    } catch (err) {
+      this.winston.logger.error(err);
+    } finally {
+      resolver('finish');
+    }
   }
 }

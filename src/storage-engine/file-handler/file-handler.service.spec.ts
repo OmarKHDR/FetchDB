@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { FileHandlerService } from './file-handler.service';
-import { Column } from '../types/column.type';
 import { WinstonLoggerModule } from '../../winston-logger/winston-logger.module';
 import { DbHandlerService } from '../db-handler/db-handler.service';
 
@@ -20,14 +19,14 @@ describe('FileHandlerService', () => {
     expect(service).toBeDefined();
   });
 
-  // it('creating new table', async () => {
-  //   const columns: Array<Column> = [
-  //     {
-  //       name: 'name',
-  //       type: 'VARCHAR',
-  //       IsPK: true,
-  //     },
-  //   ];
-  //   await service.createNewTable('students', columns);
-  // });
+  it('creating new table', async () => {
+    const columns: Array<Column> = [
+      {
+        name: 'name',
+        type: 'VARCHAR',
+        IsPK: true,
+      },
+    ];
+    await service.createNewTable('students', columns);
+  });
 });

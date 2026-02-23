@@ -7,13 +7,14 @@ import { Injectable } from '@nestjs/common';
 @Injectable()
 export class DbHandlerService {
   readonly rootDir: string = path.join(process.cwd(), 'data');
+  readonly schemaFilePath: string = path.join(this.rootDir, 'schema.json');
   constructor(private winston: WinstonLoggerService) {
-    this.setupDataDirectory(this.rootDir).catch(() => {});
+    this.setupDataDirectory().catch(() => {});
   }
 
-  async setupDataDirectory(root: string) {
+  async setupDataDirectory() {
     try {
-      await fs.mkdir(root);
+      await fs.mkdir(this.rootDir);
     } catch (err) {
       this.winston.logger.error(err);
     }

@@ -84,7 +84,7 @@ export class TableHandlerService {
     const result: Buffer[] = [];
     for (const column of obj) {
       if (data[column.name]) {
-        //assuming any column would begin with a serial pk
+        //assuming any row would begin with a serial pk
         result.push(this.__getBufferByType(data[column.name], column.type));
       }
       result.push(Buffer.from(String('|'), 'utf-8'));
