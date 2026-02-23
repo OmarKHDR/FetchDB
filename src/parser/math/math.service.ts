@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { reserved_keywords } from 'src/shared/constants/keywords.constants';
-import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
+import { reserved_keywords } from '../../shared/constants/keywords.constants';
+import { WinstonLoggerService } from '../../winston-logger/winston-logger.service';
 
 type Expression = {
   tokens: Array<string>;

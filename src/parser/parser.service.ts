@@ -4,6 +4,7 @@ import { MathService } from './math/math.service';
 import type { ExprRes } from './math/math.service';
 import { Column, Type } from '../storage-engine/types/column.type';
 import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
+import { ASTCreate, ASTInsert, ASTSelect } from './types/trees';
 
 interface tokensParser {
   tokens: string[];
@@ -53,8 +54,11 @@ export class ParserService {
     }
   }
 
-  __handleSelectStatement(state: tokensParser) {
-    const result = {};
+  __handleSelectStatement(state: tokensParser): ASTSelect {
+    const result: ASTSelect = {
+      statement: 'select',
+      from: [],
+    };
     const columnNames: string[] = [];
     result['statement'] = this.eat(state);
     // search selected columns
@@ -107,15 +111,11 @@ export class ParserService {
   }
 
   __handleInsertStatement(state: tokensParser) {
-    const result: {
-      table: string;
-      columns: Array<{
-        name: string;
-        value: string;
-      }>;
-    } = {
-      table: '',
-      columns: [],
+    const result: ASTInsert = {
+      statement: 'insert',
+      tablename: '',
+      columnsNames: [],
+      columnsValues: [],
     };
     result['statement'] = this.eat(state);
     if (this.peek(state) !== 'into') {
@@ -126,19 +126,25 @@ export class ParserService {
     if (reserved_keywords.includes(this.peek(state))) {
       throw new Error('Syntax Error: must provide a table to insert into');
     } else {
-      result['table'] = this.eat(state);
+      result['tablename'] = this.eat(state);
     }
-    const columnNames: Array<string> = [];
+    const columnsNames: Array<string> = [];
     if (this.peek(state) === '(') {
       this.eat(state);
       for (; state.cursor < state.tokens.length; ) {
         const token = this.eat(state);
         if (token === ')') break;
         else if (token === ',') continue;
-        else columnNames.push(token);
+        else {
+          if (!token)
+            throw new Error(
+              `Syntax Error: a column name is missing at ${state.cursor}`,
+            );
+          columnsNames.push(token);
+        }
       }
     }
-    const columnValues: Array<string> = [];
+    const columnsValues: Array<string> = [];
     if (this.peek(state) === 'values') {
       this.eat(state);
       if (this.eat(state) !== '(')
@@ -147,41 +153,22 @@ export class ParserService {
         const token = this.eat(state);
         if (token === ')') break;
         else if (token === ',') continue;
-        else columnValues.push(token);
+        else columnsValues.push(token ?? 'null');
       }
     }
-    if (columnNames.length !== 0) {
-      if (columnNames.length !== columnValues.length)
-        throw new Error('Syntax Error: columns and values must match in size');
-      result['columns'] = [];
-      for (let i = 0; i < columnNames.length; i++) {
-        if (!columnNames[i])
-          throw new Error(`Syntax Error: a column name is missing at ${i}`);
-        const obj = {
-          name: columnNames[i],
-          value: columnValues[i] ?? 'null',
-        };
-        result.columns.push(obj);
-      }
-    } else {
-      for (let i = 0; i < columnValues.length; i++) {
-        const obj = {
-          name: '',
-          value: columnValues[i] ?? 'null',
-        };
-        result.columns.push(obj);
-      }
-    }
+    if (
+      columnsNames.length !== 0 &&
+      columnsNames.length !== columnsValues.length
+    )
+      throw new Error('Syntax Error: columns and values must match in size');
+    result.columnsNames = columnsNames;
+    result.columnsValues = columnsValues;
     return result;
   }
 
   // create table users (id serial primary key, ....)
   __handleCreateStatement(state: tokensParser) {
-    const result: {
-      statement: string;
-      tablename: string;
-      columns: Column[];
-    } = {
+    const result: ASTCreate = {
       statement: 'create',
       tablename: '',
       columns: [],
