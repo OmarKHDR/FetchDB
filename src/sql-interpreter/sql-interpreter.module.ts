@@ -1,8 +1,14 @@
 import { Module } from '@nestjs/common';
 import { SqlInterpreterService } from './sql-interpreter.service';
-import { LexerService } from '../lexer/lexer.service';
+import { LexerService } from './lexer/lexer.service';
+import { ParserModule } from 'src/parser/parser.module';
+import { WinstonLoggerModule } from 'src/winston-logger/winston-logger.module';
+import { ExecuterService } from './executer/executer.service';
+import { StorageEngineModule } from 'src/storage-engine/storage-engine.module';
 
 @Module({
-  providers: [SqlInterpreterService, LexerService],
+  imports: [ParserModule, WinstonLoggerModule, StorageEngineModule],
+  providers: [SqlInterpreterService, LexerService, ExecuterService],
+  exports: [SqlInterpreterService],
 })
 export class SqlInterpreterModule {}
