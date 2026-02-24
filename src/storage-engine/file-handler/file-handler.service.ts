@@ -6,6 +6,7 @@ import path from 'path';
 import { WinstonLoggerService } from '../../winston-logger/winston-logger.service';
 import { MutexService } from '../mutex/mutex.service';
 import { TableHandlerService } from '../table-reader/table-handler.service';
+import { buffer } from 'stream/consumers';
 
 @Injectable()
 export class FileHandlerService {
@@ -49,12 +50,9 @@ export class FileHandlerService {
       index: indexfd,
     };
   }
-  async createFileIfNotExists(filename: string) {
+  async createFileIfNotExists(filepath: string) {
     try {
-      const filehandler = await fs.open(
-        path.join(this.dbHandler.rootDir, filename),
-        'a+',
-      );
+      const filehandler = await fs.open(filepath, 'a+');
       return filehandler;
     } catch (err) {
       this.winston.logger.error(err);
@@ -69,7 +67,7 @@ export class FileHandlerService {
       tables[table] = obj[table];
     }
     const data = JSON.stringify(tables);
-    const resolver = await this.mutex.acquireMutex(this.schemaPath);
+    const resolver = await this.mutex.acquireMutex('schema.json');
     try {
       const tmpfile = path.join(this.dbHandler.rootDir, 'schema.tmp.json');
       await fs.writeFile(tmpfile, data);
@@ -82,7 +80,7 @@ export class FileHandlerService {
   }
 
   async __readSchemaFile() {
-    const resolver = await this.mutex.acquireMutex(this.schemaPath);
+    const resolver = await this.mutex.acquireMutex('schema.json');
     let data: string;
     try {
       data = await fs.readFile(this.schemaPath, 'utf-8');
@@ -111,7 +109,7 @@ export class FileHandlerService {
     if (!this.tables[tablename])
       throw new Error(`table ${tablename} doesn't exists`);
     const row: Record<string, string> = {};
-    if (!columns.length) {
+    if (!columns || !columns.length) {
       if (values.length !== this.schemaObj[tablename].length) {
         throw new Error(`inserted data doesn't match table schema`);
       } else {
@@ -151,11 +149,52 @@ export class FileHandlerService {
     const buffer = this.__getTableBuffer(tablename, values, columns);
     const resolver = await this.mutex.acquireMutex(tablename);
     try {
+      const dataOffset = (await this.tables[tablename].table.stat()).size;
+      const b = this.tableHandler.getAllocatedBuffer(0, 8);
+      b.writeBigInt64LE(BigInt(dataOffset));
+      await this.tables[tablename].index.appendFile(b);
       await this.tables[tablename].table.appendFile(buffer);
     } catch (err) {
       this.winston.logger.error(err);
     } finally {
       resolver('finish');
     }
+  }
+
+  async readById(tablename: string, id: number) {
+    const offset = id * 8;
+    const resolver = await this.mutex.acquireMutex(tablename);
+    let dataOffset: number = 0;
+    let dataLength: number = 0;
+    try {
+      const rowCount = (await this.tables[tablename].index.stat()).size / 8;
+      let buf: { buffer: Buffer; bytesRead: number };
+      if (rowCount > id - 1) {
+        buf = await this.tables[tablename].index.read({
+          offset,
+          length: 16,
+        });
+        dataOffset = Number(buf.buffer.readBigInt64LE(0));
+        dataLength = Number(buf.buffer.readBigInt64LE(8)) - dataOffset;
+      } else if (rowCount === id) {
+        buf = await this.tables[tablename].index.read({
+          offset,
+          length: 8,
+        });
+        dataOffset = Number(buf.buffer.readBigInt64LE(0));
+        dataLength =
+          (await this.tables[tablename].table.stat()).size - dataOffset;
+      }
+    } finally {
+      resolver('finish');
+    }
+    const fileBuf = await this.tables[tablename].table.read({
+      offset: Number(dataOffset),
+      length: dataLength,
+    });
+    return this.tableHandler.tableBufferToObject(
+      fileBuf,
+      this.schemaObj[tablename],
+    );
   }
 }

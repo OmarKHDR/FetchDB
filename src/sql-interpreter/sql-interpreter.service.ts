@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { LexerService } from './lexer/lexer.service';
 import { ParserService } from '../parser/parser.service';
 import { StorageEngineService } from 'src/storage-engine/storage-engine.service';
-import { ASTCreate } from 'src/parser/types/trees';
+import { ASTCreate, ASTInsert } from 'src/parser/types/trees';
 @Injectable()
 export class SqlInterpreterService {
   constructor(
@@ -17,6 +17,9 @@ export class SqlInterpreterService {
     switch (ASTobj.statement) {
       case 'create':
         await this.storageEngine.createTable(ASTobj as ASTCreate);
+        break;
+      case 'insert':
+        await this.storageEngine.insertIntoTable(ASTobj as ASTInsert);
         break;
       default:
         throw new Error(`not implemented statement`);

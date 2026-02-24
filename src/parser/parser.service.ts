@@ -199,7 +199,7 @@ export class ParserService {
         name: this.eat(state),
         type: this.eat(state) as Type,
       };
-      if (column.type === 'VARCHAR') {
+      if (column.type === 'varchar') {
         if (this.eat(state) === '(') {
           const limit = this.eat(state);
           if (isNaN(Number(limit)))
@@ -224,8 +224,11 @@ export class ParserService {
         const val = this.eat(state);
         if (val === 'primary') {
           const pk = this.eat(state);
-          if (pk === 'key') column.IsPK = true;
-          else throw new Error(`Syntax Error: expected KEY found ${pk}`);
+          if (pk === 'key') {
+            column.IsNullable = false;
+            column.IsUnique = true;
+            column.IsPK = true;
+          } else throw new Error(`Syntax Error: expected KEY found ${pk}`);
         }
         if (val === 'not') {
           const nullable = this.eat(state);

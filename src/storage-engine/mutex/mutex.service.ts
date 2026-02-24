@@ -9,10 +9,6 @@ export class MutexService {
     this.fileLock = {};
   }
   async acquireMutex(tablename: string) {
-    // we need to chain the mutex into a promise each time its called
-    // so we are queueing the events so an await will need all the promises to resolve, as node is single
-    // threaded no need to worry about wrapping promises to have any concurrent issue
-    // filelock -> last promise -> .then(the new promise)
     let resolver: (value: unknown) => void = () => {};
     const lastTurn = this.fileLock[tablename] || Promise.resolve();
     const myTurn = new Promise((resolve) => {

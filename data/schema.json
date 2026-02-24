@@ -1,1 +1,1 @@
-{}
+{"users":[{"name":"id","type":"serial","IsNullable":false,"IsUnique":true,"IsPK":true},{"name":"name","type":"varchar","IsNullable":true,"IsUnique":false}],"employees":[{"name":"id","type":"serial","IsNullable":false,"IsUnique":true,"IsPK":true},{"name":"name","type":"varchar","IsNullable":true,"IsUnique":false}]}

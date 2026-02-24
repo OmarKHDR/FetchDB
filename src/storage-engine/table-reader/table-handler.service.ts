@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Column, Type } from '../types/column.type';
 import { WinstonLoggerService } from '../../winston-logger/winston-logger.service';
+import { buffer } from 'stream/consumers';
 
+// not handling any files only dealing with buffers
 // table data is
 // assuming pk is always at the begining and is a serial
 // [pk-serial]|[data]|[data]|[data]|[prevVersion][deletedbyte]
@@ -37,17 +39,18 @@ export class TableHandlerService {
       );
       cellStart = cellEnd + 1;
     }
+    return result;
   }
 
   __getDataByType(buffer: Buffer, start: number, end: number, datatype: Type) {
     switch (datatype) {
-      case 'VARCHAR':
+      case 'varchar':
         return buffer.toString('utf8', start, end);
-      case 'FLOAT':
+      case 'float':
         return buffer.readFloatLE(start);
-      case 'INT':
+      case 'int':
         return buffer.readInt32LE(start);
-      case 'SERIAL':
+      case 'serial':
         return buffer.readBigUInt64LE(start);
       default:
         throw new Error('not implemented datatype');
@@ -57,17 +60,17 @@ export class TableHandlerService {
   __getBufferByType(data: string, type: Type) {
     let buffer: Buffer;
     switch (type) {
-      case 'VARCHAR':
+      case 'varchar':
         return Buffer.from(String(data), 'utf-8');
-      case 'FLOAT':
+      case 'float':
         buffer = Buffer.alloc(4);
         buffer.writeFloatLE(parseFloat(data));
         return buffer;
-      case 'INT':
+      case 'int':
         buffer = Buffer.alloc(4);
         buffer.writeInt32LE(parseInt(data));
         return buffer;
-      case 'SERIAL':
+      case 'serial':
         buffer = Buffer.alloc(8);
         buffer.writeBigInt64LE(BigInt(data));
         return buffer;
@@ -97,7 +100,7 @@ export class TableHandlerService {
     const deletedByte = Buffer.alloc(1);
     deletedByte.writeInt8(0);
     result.push(deletedByte);
-    return result;
+    return Buffer.concat(result);
   }
 
   // indexes has fixed size rows so calculating their offset is easy
@@ -105,10 +108,16 @@ export class TableHandlerService {
   // index will have rowidoffset both are bigint no need for
   indexReader(bufferObj: { buffer: Buffer; bytesRead: number }) {
     const { buffer } = bufferObj;
-    const index = {};
     //why would we need to write the id if its already calculated by the pk * 8bytes
     // index['internalRowId'] = buffer.readBigInt64LE(0);
-    index['offset'] = buffer.readBigInt64LE(0);
-    return index;
+    const index = buffer.readBigInt64LE(0);
+    const rowLength = buffer.readInt32LE(8);
+    // each row will be 8 + 4 = 12 bytes
+    return { index, rowLength };
+  }
+
+  getAllocatedBuffer(start: number, end: number) {
+    const buf: Buffer = Buffer.alloc(end - start);
+    return buf;
   }
 }
