@@ -6,7 +6,6 @@ import path from 'path';
 import { WinstonLoggerService } from '../../winston-logger/winston-logger.service';
 import { MutexService } from '../mutex/mutex.service';
 import { TableHandlerService } from '../table-reader/table-handler.service';
-import { buffer } from 'stream/consumers';
 
 @Injectable()
 export class FileHandlerService {
@@ -62,11 +61,11 @@ export class FileHandlerService {
 
   async __updateSchema(obj: Record<string, Column[]>) {
     const tables = await this.__readSchemaFile();
-
     for (const table in obj) {
       tables[table] = obj[table];
     }
     const data = JSON.stringify(tables);
+    this.schemaObj = tables;
     const resolver = await this.mutex.acquireMutex('schema.json');
     try {
       const tmpfile = path.join(this.dbHandler.rootDir, 'schema.tmp.json');
@@ -87,6 +86,7 @@ export class FileHandlerService {
     } finally {
       resolver('hi');
     }
+    console.log(data);
     return JSON.parse(data || '{}') as Record<string, Column[]>;
   }
 
@@ -110,6 +110,7 @@ export class FileHandlerService {
       throw new Error(`table ${tablename} doesn't exists`);
     const row: Record<string, string> = {};
     if (!columns || !columns.length) {
+      console.log(this.schemaObj);
       if (values.length !== this.schemaObj[tablename].length) {
         throw new Error(`inserted data doesn't match table schema`);
       } else {
@@ -150,8 +151,9 @@ export class FileHandlerService {
     const resolver = await this.mutex.acquireMutex(tablename);
     try {
       const dataOffset = (await this.tables[tablename].table.stat()).size;
-      const b = this.tableHandler.getAllocatedBuffer(0, 8);
+      const b = this.tableHandler.getAllocatedBuffer(0, 12);
       b.writeBigInt64LE(BigInt(dataOffset));
+      b.writeInt32LE(buffer.length);
       await this.tables[tablename].index.appendFile(b);
       await this.tables[tablename].table.appendFile(buffer);
     } catch (err) {
@@ -162,32 +164,16 @@ export class FileHandlerService {
   }
 
   async readById(tablename: string, id: number) {
-    const offset = id * 8;
-    const resolver = await this.mutex.acquireMutex(tablename);
+    const indexOffset = id * 12;
     let dataOffset: number = 0;
     let dataLength: number = 0;
-    try {
-      const rowCount = (await this.tables[tablename].index.stat()).size / 8;
-      let buf: { buffer: Buffer; bytesRead: number };
-      if (rowCount > id - 1) {
-        buf = await this.tables[tablename].index.read({
-          offset,
-          length: 16,
-        });
-        dataOffset = Number(buf.buffer.readBigInt64LE(0));
-        dataLength = Number(buf.buffer.readBigInt64LE(8)) - dataOffset;
-      } else if (rowCount === id) {
-        buf = await this.tables[tablename].index.read({
-          offset,
-          length: 8,
-        });
-        dataOffset = Number(buf.buffer.readBigInt64LE(0));
-        dataLength =
-          (await this.tables[tablename].table.stat()).size - dataOffset;
-      }
-    } finally {
-      resolver('finish');
-    }
+    let buf: { buffer: Buffer; bytesRead: number };
+    buf = await this.tables[tablename].index.read({
+      offset: indexOffset,
+      length: 12,
+    });
+    dataOffset = Number(buf.buffer.readBigInt64LE(0));
+    dataLength = Number(buf.buffer.readInt32LE(8));
     const fileBuf = await this.tables[tablename].table.read({
       offset: Number(dataOffset),
       length: dataLength,
