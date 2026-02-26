@@ -1,4 +1,4 @@
-export type Type = 'serial' | 'int' | 'float' | 'varchar';
+export type Type = 'serial' | 'int' | 'float' | 'varchar' | 'timestamp';
 export type Column = {
   name: string;
   type: Type;
