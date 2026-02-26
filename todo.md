@@ -14,11 +14,15 @@
 ## MODIFICATIONS:
 - currently the schema storage is not allowing versioning, while hanling logic with respect to in memory schema object makes it flexible to versioning, I was overwriting the schema.json
 	- i thought about using ndjson, but if i know the exact version why not use that to execute same table indexing logic?
-	- changing the scheme read and update to create two files schema.ojson (o as offset) and schema.oindex (so it doesnt collide with a table if it was named schema for somereason)
-- modify the select statement file handler to be more broad instead of current handle of the id=number only 
-- where clause was over engineered but it wont harm so we can for now handle (id {=, <>, >, <, >=, <=} number)
-
+- [x] change the scheme read and update to create two files schema.ojson (o as offset) and schema.oindex (so it doesnt collide with a table if it was named schema for somereason)
+- [x] modify the select statement file handler to be more broad instead of current handle of the id=number only 
+- [x] where clause was over engineered but it wont harm so we can for now handle (id {=, <>, >, <, >=, <=} number)
+- [x] clean the database corruption for half read or half write using the index file which should point to the last completely correct row, other than that it should be deleted
+- [x] fix the current logger to have context and override the logger with direct methods that takes context and message
+- [x] refactor the current parser into two separate DML and DDL parser logic, with an orchestrator handling them
 ## ADD
-- new data type "timestamp" it should be validated but use string for it
-- handle update statement filehandler and delete statement
-- create the history logic to control the schema version used
+- [x] add to the current rows a prevVersionSize after the prevVersion pointer so we can read the data history
+- [ ] new data type "timestamp" it should be validated but use string for it
+- [ ] handle update statement filehandler and delete statement
+- [ ] create the history logic to control the schema version used
+- [ ] add logs and error handling

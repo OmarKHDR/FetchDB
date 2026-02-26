@@ -11,11 +11,27 @@ export class AppController {
   @Post('/execute/dml')
   async executeDML(@Body() body: string) {
     this.winston.logger.info(`[AppController]: recieved query: ${body}`);
-    return await this.interpreter.interpret(body);
+    try {
+      return {
+        success: true,
+        message: await this.interpreter.interpretDML(body),
+      };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
   }
 
-  @Post('/execute/dll')
-  async executeDLL() {}
+  @Post('/execute/ddl')
+  async executeDLL(@Body() body: string) {
+    try {
+      return {
+        success: true,
+        message: await this.interpreter.interpretDDL(body),
+      };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  }
 
   @Get('/history')
   async getQueryHistory() {}
