@@ -64,7 +64,10 @@ export class LexerService {
       buffer += token;
     }
     if (buffer) tokensArray.push(buffer);
-    // console.log(tokensArray);
+    this.winston.info(
+      `The tokenizer finished tokenizing: [${tokensArray.join(', ')}]`,
+      'Tokenizer',
+    );
     return tokensArray;
   }
 }

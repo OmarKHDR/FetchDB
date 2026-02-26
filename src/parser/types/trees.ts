@@ -3,7 +3,7 @@ import { ExprRes } from '../math/math.service';
 
 export type ASTSelect = {
   statement: string;
-  from: string[];
+  tablename: string;
   selectAll?: boolean;
   columns?: Array<string>;
   where?: ExprRes | string;
@@ -20,4 +20,18 @@ export type ASTInsert = {
   tablename: string;
   columnsNames: Array<string>;
   columnsValues: Array<string>;
+};
+
+export type ASTDelete = {
+  statement: string;
+  tablename: string;
+  where: ExprRes | string;
+};
+
+export type ASTUpdate = {
+  statement: string;
+  tablename: string;
+  column: Array<string>;
+  value: Array<string>;
+  where?: ExprRes | string;
 };

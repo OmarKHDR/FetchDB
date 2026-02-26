@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ParserService } from './parser.service';
+import { ParserService } from './statements/parser.service';
 import { WinstonLoggerModule } from '../winston-logger/winston-logger.module';
 import { SharedModule } from '../shared/shared.module';
 
