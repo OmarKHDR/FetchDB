@@ -16,7 +16,6 @@ export class TableHandlerService {
     const result = {};
     const { buffer, bytesRead } = bufferObj;
     //buffer must end at the end of the column (the index file solution)
-    console.log(bytesRead);
     if (buffer.readUInt8(bytesRead - 1) === 1)
       return {
         deleted: true,
@@ -28,11 +27,12 @@ export class TableHandlerService {
       prevVersionSize === -1 ? undefined : prevVersionSize;
     let cellStart = 0;
     // result['internalRowId'] = this.__getDataByType(buffer, 0, 8, 'SERIAL');
-    // cellStart = 9;
+    // cellStart = 8;
     for (const column of obj) {
       const cellEnd = buffer.indexOf(0x7c, cellStart);
       if (cellEnd === cellStart) {
         result[column.name] = 'null';
+        cellStart++;
         continue;
       }
       result[column.name] = this.__getDataByType(
@@ -92,6 +92,7 @@ export class TableHandlerService {
     obj: Column[],
     prevVersion?: bigint,
     prevVersionSize?: number,
+    deleteRow?: boolean,
   ) {
     const result: Buffer[] = [];
     for (const column of obj) {
@@ -112,7 +113,8 @@ export class TableHandlerService {
       this.__getBufferByType(prevVersionSize.toString(), 'int' as Type),
     );
     const deletedByte = Buffer.alloc(1);
-    deletedByte.writeInt8(0);
+    if (deleteRow === true) deletedByte.writeInt8(1);
+    else deletedByte.writeInt8(0);
     result.push(deletedByte);
     return Buffer.concat(result);
   }

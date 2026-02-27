@@ -18,6 +18,7 @@ export class DMLParser extends StatementParser {
   handleSelectStatement(state: tokensParser): ASTSelect {
     const result: ASTSelect = {
       statement: 'select',
+      columns: '*',
       tablename: '',
     };
     const columnNames: string[] = [];
@@ -35,6 +36,8 @@ export class DMLParser extends StatementParser {
     }
     if (columnNames.length === 0) {
       throw new Error(`Syntax Error: SELECT must have columns selected`);
+    } else if (columnNames.length === 1 && columnNames[0] === '*') {
+      result['columns'] = '*';
     } else {
       result['columns'] = columnNames;
     }

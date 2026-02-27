@@ -22,7 +22,8 @@
 - [x] refactor the current parser into two separate DML and DDL parser logic, with an orchestrator handling them
 ## ADD
 - [x] add to the current rows a prevVersionSize after the prevVersion pointer so we can read the data history
-- [ ] new data type "timestamp" it should be validated but use string for it
-- [ ] handle update statement filehandler and delete statement
+- [x] new data type "timestamp" it should be validated but use string for it
+- [x] validate already existing types and constraints to create db integrety
+- [x] handle update statement filehandler and delete statement
 - [ ] create the history logic to control the schema version used
 - [ ] add logs and error handling

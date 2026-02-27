@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { FileHandlerService } from './file-handler/file-handler.service';
-import { ASTCreate, ASTInsert, ASTSelect } from 'src/parser/types/trees';
+import {
+  ASTCreate,
+  ASTDelete,
+  ASTInsert,
+  ASTSelect,
+  ASTUpdate,
+} from 'src/parser/types/trees';
 
 @Injectable()
 export class StorageEngineService {
@@ -40,8 +46,22 @@ export class StorageEngineService {
     }
     return await this.filehander.getMatchedRows(
       ASTtree.tablename,
+      ASTtree.columns,
       ASTtree.where,
       options,
     );
+  }
+
+  async updateTable(ASTtree: ASTUpdate) {
+    return await this.filehander.updateRows(
+      ASTtree.tablename,
+      ASTtree.where,
+      ASTtree.column,
+      ASTtree.value,
+    );
+  }
+
+  async deleteRows(ASTtree: ASTDelete) {
+    return await this.filehander.deleteRow(ASTtree.tablename, ASTtree.where);
   }
 }

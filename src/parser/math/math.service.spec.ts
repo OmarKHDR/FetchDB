@@ -22,7 +22,6 @@ describe('MathService', () => {
       tokens: ['12', '=', '13', '-', '7'],
       cursor: 0,
     });
-    console.log(expr);
     expect(expr).toEqual({
       lhs: '12',
       operator: '=',

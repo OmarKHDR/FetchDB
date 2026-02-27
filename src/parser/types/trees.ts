@@ -5,7 +5,7 @@ export type ASTSelect = {
   statement: string;
   tablename: string;
   selectAll?: boolean;
-  columns?: Array<string>;
+  columns: Array<string> | '*';
   where?: ExprRes | string;
 };
 

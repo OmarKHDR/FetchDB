@@ -2,7 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { LexerService } from './lexer/lexer.service';
 import { ParserService } from '../parser/parser.service';
 import { StorageEngineService } from 'src/storage-engine/storage-engine.service';
-import { ASTCreate, ASTInsert, ASTSelect } from 'src/parser/types/trees';
+import {
+  ASTCreate,
+  ASTDelete,
+  ASTInsert,
+  ASTSelect,
+  ASTUpdate,
+} from 'src/parser/types/trees';
 @Injectable()
 export class SqlInterpreterService {
   constructor(
@@ -19,6 +25,10 @@ export class SqlInterpreterService {
         return await this.storageEngine.insertIntoTable(ASTobj as ASTInsert);
       case 'select':
         return await this.storageEngine.selectRows(ASTobj as ASTSelect);
+      case 'update':
+        return await this.storageEngine.updateTable(ASTobj as ASTUpdate);
+      case 'delete':
+        return await this.storageEngine.deleteRows(ASTobj as ASTDelete);
       case 'create':
         throw new Error(
           '[Interpreter Error]: This is a DDL statement call the /execute/ddl endpoint',

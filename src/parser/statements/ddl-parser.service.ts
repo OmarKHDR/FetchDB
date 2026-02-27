@@ -53,7 +53,7 @@ export class DDLParser extends StatementParser {
             throw new Error(
               `Syntax Error: Expected number as a limit for varchar and found ${limit}`,
             );
-          column.varcharLimint = Number(limit);
+          column.varcharLimit = Number(limit);
           if (this.eat(state) !== ')')
             throw new Error(
               `Syntax Error: Expected closed pranthesis but found ${this.eat(state)}`,

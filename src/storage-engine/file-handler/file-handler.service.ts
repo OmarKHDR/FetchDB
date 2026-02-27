@@ -1,13 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import fs from 'fs/promises';
 import { DbHandlerService } from '../db-handler/db-handler.service';
-import { Column } from '../types/column.type';
+import { Column, Type } from '../types/column.type';
 import path from 'path';
 import { WinstonLoggerService } from '../../winston-logger/winston-logger.service';
 import { MutexService } from '../mutex/mutex.service';
 import { TableHandlerService } from '../table-reader/table-handler.service';
 import { ExprRes } from 'src/parser/math/math.service';
-import { validateHeaderValue } from 'http';
 
 @Injectable()
 export class FileHandlerService {
@@ -29,6 +28,10 @@ export class FileHandlerService {
     this.winston.logger.info(`shcema file already exists`);
     this.schema = await this.createSchemaFiles();
     this.schemaVersion = await this.getLatestVersion();
+    this.winston.info(
+      `current schema version: ${this.schemaVersion}`,
+      'FileHandler',
+    );
     this.schemaObj = await this.__readSchemaFile();
     for (const table in this.schemaObj) {
       this.tables[table] = await this.__openTable(table);
@@ -102,7 +105,7 @@ export class FileHandlerService {
       const filehandler = await fs.open(filepath, mode);
       return filehandler;
     } catch (err) {
-      this.winston.logger.error(err);
+      this.winston.error(`${err}`, 'FileHandler');
       throw err;
     }
   }
@@ -125,7 +128,7 @@ export class FileHandlerService {
       await this.schema['index'].appendFile(b);
       this.updateVersion(1);
     } catch (err) {
-      this.winston.logger.error(err);
+      this.winston.error(`${err}`, 'FileHandler');
     } finally {
       resolver('finaly');
     }
@@ -140,7 +143,6 @@ export class FileHandlerService {
   }
 
   async __readSchemaFile() {
-    console.log(` schema version: ${this.schemaVersion}`);
     if (this.schemaVersion === 0) return {} as Record<string, Array<Column>>;
     const indexOffset: number = (this.schemaVersion - 1) * 12;
     const buf: { buffer: Buffer; bytesRead: number } = await this.schema[
@@ -173,9 +175,7 @@ export class FileHandlerService {
     return tableObj;
   }
 
-  validateValue() {}
-
-  __getTableBuffer(
+  async __getTableBuffer(
     tablename: string,
     values: Array<string>,
     columns?: Array<string>,
@@ -190,12 +190,7 @@ export class FileHandlerService {
         // no names provided for columns and columns matches schema
         let i = 0;
         for (const column of this.schemaObj[tablename]) {
-          this.validateValue(column.type, values[i]);
-          if (column.IsUnique) {
-            if (this.valueExists(tablename, column.name, values[i])) {
-              throw new Error(`[StorageEngine] Unique constraints violation`);
-            }
-          }
+          await this.constraintsValidator(tablename, column, values[i]);
           row[column.name] = values[i++];
         }
       }
@@ -203,7 +198,7 @@ export class FileHandlerService {
       for (const column of this.schemaObj[tablename]) {
         if (columns.includes(column.name)) {
           const index = columns.indexOf(column.name);
-          this.validateValue(column.type, values[index]);
+          this.validateType(column.type, values[index]);
           row[column.name] = values[index];
         } else {
           if (column.default) row[column.name] = column.default;
@@ -218,12 +213,45 @@ export class FileHandlerService {
     return this.tableHandler.dataToTableBuffer(row, this.schemaObj[tablename]);
   }
 
+  async valueExists(tablename: string, column: string, value: string) {
+    const matches = await this.getMatchedRows(tablename, '*', {
+      lhs: column,
+      operator: '=',
+      rhs: value,
+    });
+    if (matches.length) return true;
+    else return false;
+  }
+
+  validateType(t: Type, value: string) {
+    try {
+      switch (t) {
+        case 'float':
+          parseFloat(value);
+          return;
+        case 'int':
+          parseInt(value);
+          return;
+        case 'serial':
+          BigInt(value);
+          return;
+        case 'timestamp':
+          if (new Date(value).getTime() > 0) return;
+          else throw new Error('');
+        case 'varchar':
+          return;
+      }
+    } catch (err) {
+      throw new Error(`Type Violation: ${value} should have been of type ${t}`);
+    }
+  }
+
   async writeToTable(
     tablename: string,
     values: Array<string>,
     columns?: Array<string>,
   ) {
-    const buffer = this.__getTableBuffer(tablename, values, columns);
+    const buffer = await this.__getTableBuffer(tablename, values, columns);
     const resolver = await this.mutex.acquireMutex(tablename);
     try {
       const dataOffset = (await this.tables[tablename].table.stat()).size;
@@ -236,7 +264,7 @@ export class FileHandlerService {
       await this.tables[tablename].table.appendFile(buffer);
       await this.tables[tablename].index.appendFile(b);
     } catch (err) {
-      this.winston.logger.error(err);
+      this.winston.error(`${err}`, 'FileHandler');
     } finally {
       resolver('finish');
     }
@@ -273,8 +301,9 @@ export class FileHandlerService {
     }
     return result;
   }
-  async readEqId(tablename: string, id: number) {
-    if (id < 0) throw new Error(`[StorageEngine]: the id can't go below zero`);
+  async readEqId(tablename: string, columns: Array<string> | '*', id: number) {
+    if (id < 0)
+      throw new Error(`Type Violation: the SERIAL id can't go below zero`);
     const indexOffset = id * 12;
 
     const buf: { buffer: Buffer; bytesRead: number } = await this.tables[
@@ -291,14 +320,34 @@ export class FileHandlerService {
       length: dataLength,
     });
 
-    return this.tableHandler.tableBufferToObject(
+    const rowObj = this.tableHandler.tableBufferToObject(
       fileBuf,
       this.schemaObj[tablename],
     );
+    if (rowObj['deleted'] === undefined) {
+      throw new Error(`the row with id: ${id} was deleted`);
+    }
+    let filteredRowObj = {};
+    if (typeof columns === 'string' && columns === '*') {
+      delete rowObj['prevVersion'];
+      delete rowObj['prevVersionSize'];
+      filteredRowObj = rowObj;
+    } else {
+      for (const column of columns) {
+        if (rowObj[column] === undefined)
+          throw new Error(
+            `relation ${column} doesn't exist on table ${tablename}`,
+          );
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        filteredRowObj[column] = rowObj[column];
+      }
+    }
+    return filteredRowObj;
   }
 
   async getMatchedRows(
     tablename: string,
+    columns: Array<string> | '*',
     where?: ExprRes | string,
     options?: {
       op: string;
@@ -318,11 +367,8 @@ export class FileHandlerService {
         startPos = 0;
         endPos = Math.min(options.id, indexCount * 12);
       } else if (options.op === '=') {
-        if (options.id >= indexCount)
-          throw new Error(
-            `[StorageEngine]: max id was exceded current max id is: ${indexCount - 1}`,
-          );
-        return [await this.readEqId(tablename, options.id)];
+        if (options.id >= indexCount) return [];
+        return [await this.readEqId(tablename, columns, options.id)];
       } else {
         startPos = 0;
         endPos = indexCount;
@@ -345,10 +391,28 @@ export class FileHandlerService {
         row,
         this.schemaObj[tablename],
       );
+      if (rowObj['deleted']) {
+        continue;
+      }
+      let filteredRowObj = {};
+      if (typeof columns === 'string' && columns === '*') {
+        delete rowObj['prevVersion'];
+        delete rowObj['prevVersionSize'];
+        filteredRowObj = rowObj;
+      } else {
+        for (const column of columns) {
+          if (rowObj[column] === undefined)
+            throw new Error(
+              `relation ${column} doesn't exist on table ${tablename}`,
+            );
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          filteredRowObj[column] = rowObj[column];
+        }
+      }
       if (!where) {
-        resRows.push(rowObj);
+        resRows.push(filteredRowObj);
       } else if (this.compare(where, rowObj)) {
-        resRows.push(rowObj);
+        resRows.push(filteredRowObj);
       }
     }
     return resRows;
@@ -368,7 +432,7 @@ export class FileHandlerService {
         ) {
           return rowObj[typed.value].slice(1, rowObj[typed.value].length - 1);
         }
-        return Number(rowObj[typed.value]);
+        return Number(rowObj[typed.value]) || rowObj[typed.value];
       }
       return typed.value;
     }
@@ -427,5 +491,129 @@ export class FileHandlerService {
     }
     return result;
   }
-  updateRows() {}
+  async updateRows(
+    tablename: string,
+    where: ExprRes | string | undefined,
+    columns: Array<string>,
+    values: Array<string>,
+  ) {
+    //for each matched row we will update the values of the object, then append values, and change the prevVersion, prevVersionSize, and the index info
+    const rows = await this.getMatchedRows(tablename, '*', where);
+    const updatedRows: Array<object> = [];
+    for (const row of rows) {
+      for (const column of this.schemaObj[tablename]) {
+        const valIndex = columns.indexOf(column.name);
+        if (valIndex === -1) continue;
+        if (column.name === 'id')
+          throw new Error(`Violation of DB design, cannot change the id`);
+        await this.constraintsValidator(tablename, column, values[valIndex]);
+        row[column.name] = values[valIndex];
+      }
+
+      // going to the index get past size and pos
+      // that makes it getting the whole index 12 byte to append to the buffer, so we dont need to calculate past data
+      // only replace the current index with the current row
+      const resolver = await this.mutex.acquireMutex(tablename);
+      try {
+        const index = await this.readIndexList(
+          tablename,
+          Number(row['id']),
+          Number(row['id']) + 1,
+        );
+        const buff = this.tableHandler.dataToTableBuffer(
+          row,
+          this.schemaObj[tablename],
+          index[0].index,
+          index[0].rowLength,
+        );
+        const dataOffset = (await this.tables[tablename].table.stat()).size;
+        await this.tables[tablename].table.appendFile(buff);
+        await this.replaceIndex(
+          tablename,
+          row['id'] as number,
+          buff,
+          BigInt(dataOffset),
+        );
+        delete row['prevVersion'];
+        delete row['prevVersionSize'];
+        updatedRows.push(row);
+      } catch (err) {
+        this.winston.error(`${err}`, 'FileHandler');
+      } finally {
+        resolver('final');
+      }
+      return updatedRows;
+    }
+  }
+
+  async constraintsValidator(tablename: string, column: Column, value: string) {
+    if (column.IsNullable && value === 'null')
+      throw new Error(`Constraint Violation: ${column.name} can't be null`);
+    this.validateType(column.type, value);
+    if (
+      column.IsUnique &&
+      (await this.valueExists(tablename, column.name, value))
+    )
+      throw new Error(`Constraint Violation: Unique constraints violation`);
+    if (column.type === 'varchar') {
+      if (value.length - 2 > (column.varcharLimit || 65535)) {
+        throw new Error(
+          `Constraint Violation: VARCHAR limit exceeded current limit is: ${column.varcharLimit}, found: ${value.length - 2}`,
+        );
+      }
+    }
+    //checking for fk relations
+  }
+
+  async replaceIndex(
+    tablename: string,
+    id: number,
+    buff: Buffer<ArrayBuffer>,
+    offset: bigint,
+  ) {
+    const b = this.tableHandler.getAllocatedBuffer(0, 12);
+    b.writeBigInt64LE(offset);
+    b.writeInt32LE(buff.length, 8);
+    await this.tables[tablename].index.write(b, 0, 12, id * 12);
+  }
+
+  async deleteRow(tablename: string, where: ExprRes | string) {
+    if (where === undefined)
+      throw new Error(`delete statement must have WHERE filter`);
+    const rows = await this.getMatchedRows(tablename, '*', where);
+    const updatedRows: Array<object> = [];
+    for (const row of rows) {
+      // going to the index get past size and pos
+      // that makes it getting the whole index 12 byte to append to the buffer, so we dont need to calculate past data
+      // only replace the current index with the current row
+      const resolver = await this.mutex.acquireMutex(tablename);
+      try {
+        const index = await this.readIndexList(
+          tablename,
+          Number(row['id']),
+          Number(row['id']) + 1,
+        );
+        const buff = this.tableHandler.dataToTableBuffer(
+          row,
+          this.schemaObj[tablename],
+          index[0].index,
+          index[0].rowLength,
+          true,
+        );
+        const dataOffset = (await this.tables[tablename].table.stat()).size;
+        await this.tables[tablename].table.appendFile(buff);
+        await this.replaceIndex(
+          tablename,
+          row['id'] as number,
+          buff,
+          BigInt(dataOffset),
+        );
+      } catch (err) {
+        this.winston.error(err, 'FileHandler');
+      } finally {
+        resolver('final');
+      }
+      return updatedRows;
+    }
+  }
 }

@@ -2,7 +2,7 @@ export type Type = 'serial' | 'int' | 'float' | 'varchar' | 'timestamp';
 export type Column = {
   name: string;
   type: Type;
-  varcharLimint?: number;
+  varcharLimit?: number;
   serial?: number;
   IsDeleted?: boolean;
   IsPK?: boolean;
