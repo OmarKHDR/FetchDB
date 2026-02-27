@@ -1,11 +1,13 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { SqlInterpreterService } from './sql-interpreter/sql-interpreter.service';
 import { WinstonLoggerService } from './winston-logger/winston-logger.service';
+import { StorageEngineService } from './storage-engine/storage-engine.service';
 @Controller()
 export class AppController {
   constructor(
     private interpreter: SqlInterpreterService,
     private winston: WinstonLoggerService,
+    private storage: StorageEngineService,
   ) {}
 
   @Post('/execute/dml')
@@ -14,7 +16,7 @@ export class AppController {
     try {
       return {
         success: true,
-        message: await this.interpreter.interpretDML(body),
+        ...(await this.interpreter.interpretDML(body)),
       };
     } catch (err) {
       return { success: false, message: err.message };
@@ -22,11 +24,11 @@ export class AppController {
   }
 
   @Post('/execute/ddl')
-  async executeDLL(@Body() body: string) {
+  async executeDDL(@Body() body: string) {
     try {
       return {
         success: true,
-        message: await this.interpreter.interpretDDL(body),
+        ...(await this.interpreter.interpretDDL(body)),
       };
     } catch (err) {
       return { success: false, message: err.message };
@@ -34,7 +36,34 @@ export class AppController {
   }
 
   @Get('/history')
-  async getQueryHistory() {}
+  async getSchemaHistory() {
+    try {
+      return {
+        success: true,
+        data: await this.storage.getSchemaHistory(),
+      };
+    } catch (err) {
+      return {
+        success: false,
+        message: err.message,
+      };
+    }
+  }
+
+  @Post('/version')
+  async setSchemaVersion(@Body() body: { id: number }) {
+    try {
+      return {
+        success: true,
+        data: await this.storage.setSchemaHistory(body.id),
+      };
+    } catch (err) {
+      return {
+        success: false,
+        message: err.message,
+      };
+    }
+  }
 
   @Post('/data/history')
   async getDataHistory() {}

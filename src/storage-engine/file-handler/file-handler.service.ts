@@ -7,6 +7,7 @@ import { WinstonLoggerService } from '../../winston-logger/winston-logger.servic
 import { MutexService } from '../mutex/mutex.service';
 import { TableHandlerService } from '../table-reader/table-handler.service';
 import { ExprRes } from 'src/parser/math/math.service';
+import { cp } from 'fs';
 
 @Injectable()
 export class FileHandlerService {
@@ -35,6 +36,16 @@ export class FileHandlerService {
     this.schemaObj = await this.__readSchemaFile();
     for (const table in this.schemaObj) {
       this.tables[table] = await this.__openTable(table);
+      for (const column of this.schemaObj[table]) {
+        if (column.type === 'serial') {
+          column.serial = Math.trunc(
+            (await this.tables[table].index.stat()).size / 12,
+          );
+          this.winston.info(
+            `setting the column ${column.name} start to ${column.serial}`,
+          );
+        }
+      }
     }
     await this.cleanDB();
   }
@@ -68,6 +79,37 @@ export class FileHandlerService {
         await this.tables[table].table.truncate(Number(index.index));
       }
     }
+  }
+
+  async getAllSchema() {
+    const result: Array<{ index: bigint; rowLength: number }> = [];
+    const end = await this.getLatestVersion();
+    const bufObj = await this.schema.index.read({
+      position: 0 * 12,
+      length: end * 12,
+    });
+    for (let i = 0; i < end; i++) {
+      result.push(
+        this.tableHandler.indexReader({
+          buffer: bufObj.buffer.subarray(i * 12, i * 12 + 12),
+          bytesRead: 12,
+        }),
+      );
+    }
+    const schemas: Array<Record<string, Array<Column>>> = [];
+    for (const index of result) {
+      const fileBuf = await this.schema['schema'].read({
+        position: index.index,
+        length: index.rowLength,
+      });
+
+      schemas.push(
+        JSON.parse(
+          fileBuf.buffer.toString('utf-8', 0, fileBuf.bytesRead) || '{}',
+        ) as Record<string, Array<Column>>,
+      );
+    }
+    return schemas;
   }
 
   async createSchemaFiles() {
@@ -115,9 +157,20 @@ export class FileHandlerService {
     for (const table in obj) {
       if (table in tables) throw new Error('table already exists');
       tables[table] = obj[table];
+      for (const column of tables[table]) {
+        if (column.type === 'serial') {
+          column.serial = Math.trunc(
+            (await this.tables[table].index.stat()).size / 12,
+          );
+          this.winston.info(
+            `setting the column ${column.name} start to ${column.serial}`,
+          );
+        }
+      }
     }
     const data = JSON.stringify(tables);
     this.schemaObj = tables;
+
     const b = this.tableHandler.getAllocatedBuffer(0, 12);
     b.writeInt32LE(data.length, 8);
     const resolver = await this.mutex.acquireMutex('schemahandler');
@@ -138,13 +191,19 @@ export class FileHandlerService {
     this.schemaVersion += steps;
   }
 
+  async setSchemaVersion(v: number) {
+    this.schemaObj = await this.__readSchemaFile(v);
+  }
+
   async getLatestVersion() {
     return Math.trunc((await this.schema['index'].stat()).size / 12);
   }
 
-  async __readSchemaFile() {
+  async __readSchemaFile(version?: number) {
+    if (version === 0) throw new Error(`wdym by version 0 bro?!`);
     if (this.schemaVersion === 0) return {} as Record<string, Array<Column>>;
-    const indexOffset: number = (this.schemaVersion - 1) * 12;
+    const indexOffset: number =
+      ((version ? version : this.schemaVersion) - 1) * 12;
     const buf: { buffer: Buffer; bytesRead: number } = await this.schema[
       'index'
     ].read({
@@ -198,11 +257,18 @@ export class FileHandlerService {
       for (const column of this.schemaObj[tablename]) {
         if (columns.includes(column.name)) {
           const index = columns.indexOf(column.name);
-          this.validateType(column.type, values[index]);
+          await this.constraintsValidator(tablename, column, values[index]);
           row[column.name] = values[index];
         } else {
           if (column.default) row[column.name] = column.default;
-          else if (!column.IsNullable) {
+          if (column.type === 'serial') {
+            if (column.serial === undefined) {
+              throw new Error(
+                `Cannot load the next Serial for column ${column.name}`,
+              );
+            }
+            row[column.name] = String(column.serial++);
+          } else if (!column.IsNullable) {
             throw new Error(`value for column ${column.name} must be setten`);
           } else {
             row[column.name] = 'null';
@@ -210,6 +276,7 @@ export class FileHandlerService {
         }
       }
     }
+    console.log(row, this.schemaObj[tablename]);
     return this.tableHandler.dataToTableBuffer(row, this.schemaObj[tablename]);
   }
 

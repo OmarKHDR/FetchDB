@@ -5,6 +5,7 @@ import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service'
 import { Column, Type } from 'src/storage-engine/types/column.type';
 import { tokensParser } from '../types/token-parser.type';
 import { ASTCreate } from '../types/trees';
+import { cp } from 'fs';
 
 @Injectable()
 export class DDLParser extends StatementParser {
@@ -84,11 +85,14 @@ export class DDLParser extends StatementParser {
         }
         if (val === 'default') {
           const defaultVal = this.eat(state);
-          if (['FLOAT', 'SERIAL', 'INT'].includes(column.type)) {
+          if (['float', 'serial', 'int'].includes(column.type)) {
             if (isNaN(Number(defaultVal))) {
               throw new Error(
                 `Syntax Error: Expected numeric default for ${column.type}`,
               );
+            }
+            if (column.type === 'serial') {
+              column.serial = 0;
             }
           }
           if (defaultVal !== ',' && defaultVal !== ')') {

@@ -64,4 +64,12 @@ export class StorageEngineService {
   async deleteRows(ASTtree: ASTDelete) {
     return await this.filehander.deleteRow(ASTtree.tablename, ASTtree.where);
   }
+
+  async getSchemaHistory() {
+    return await this.filehander.getAllSchema();
+  }
+
+  async setSchemaVersion(v: number) {
+    await this.filehander.setSchemaVersion(v);
+  }
 }

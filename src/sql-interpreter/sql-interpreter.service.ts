@@ -9,26 +9,41 @@ import {
   ASTSelect,
   ASTUpdate,
 } from 'src/parser/types/trees';
+import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
 @Injectable()
 export class SqlInterpreterService {
   constructor(
     private lexer: LexerService,
     private parser: ParserService,
     private storageEngine: StorageEngineService,
+    private winston: WinstonLoggerService,
   ) {}
 
   async interpretDML(sqlquery: string) {
     const tokens = this.lexer.tokinize(sqlquery);
     const ASTobj = this.parser.identify(tokens);
+    this.winston.query(tokens.join(' '), 'DML INTERPRETER');
     switch (ASTobj.statement) {
       case 'insert':
-        return await this.storageEngine.insertIntoTable(ASTobj as ASTInsert);
+        return {
+          query: tokens.join(' '),
+          result: await this.storageEngine.insertIntoTable(ASTobj as ASTInsert),
+        };
       case 'select':
-        return await this.storageEngine.selectRows(ASTobj as ASTSelect);
+        return {
+          query: tokens.join(' '),
+          result: await this.storageEngine.selectRows(ASTobj as ASTSelect),
+        };
       case 'update':
-        return await this.storageEngine.updateTable(ASTobj as ASTUpdate);
+        return {
+          query: tokens.join(' '),
+          result: await this.storageEngine.updateTable(ASTobj as ASTUpdate),
+        };
       case 'delete':
-        return await this.storageEngine.deleteRows(ASTobj as ASTDelete);
+        return {
+          query: tokens.join(' '),
+          result: await this.storageEngine.deleteRows(ASTobj as ASTDelete),
+        };
       case 'create':
         throw new Error(
           '[Interpreter Error]: This is a DDL statement call the /execute/ddl endpoint',
@@ -41,9 +56,14 @@ export class SqlInterpreterService {
   async interpretDDL(sqlquery: string) {
     const tokens = this.lexer.tokinize(sqlquery);
     const ASTobj = this.parser.identify(tokens);
+    this.winston.query(tokens.join(' '), 'DDL INTERPRETER');
     switch (ASTobj.statement) {
       case 'create':
-        return await this.storageEngine.createTable(ASTobj as ASTCreate);
+        await this.storageEngine.createTable(ASTobj as ASTCreate);
+        return {
+          ddl: tokens.join(' '),
+          message: 'DDL generated and saved to schema files.',
+        };
       case 'insert':
         throw new Error(
           '[Interpreter Error]: This is a DML statement call the /execute/dml endpoint',

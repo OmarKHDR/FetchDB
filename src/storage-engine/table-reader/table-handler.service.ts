@@ -63,7 +63,7 @@ export class TableHandlerService {
     }
   }
 
-  __getBufferByType(data: string, type: Type) {
+  __getBufferByType(data: string, type: Type, nextSerial?: number) {
     let buffer: Buffer;
     switch (type) {
       case 'varchar':
@@ -77,6 +77,15 @@ export class TableHandlerService {
         buffer.writeInt32LE(parseInt(data));
         return buffer;
       case 'serial':
+        buffer = Buffer.alloc(8);
+        if (nextSerial && nextSerial - 1 === Number(data))
+          buffer.writeBigInt64LE(BigInt(nextSerial - 1));
+        else
+          throw new Error(
+            `Wrong Serial provided for a serial column: provided ${data}, expected ${nextSerial}`,
+          );
+        return buffer;
+      case 'offset-serial':
         buffer = Buffer.alloc(8);
         buffer.writeBigInt64LE(BigInt(data));
         return buffer;
@@ -98,7 +107,9 @@ export class TableHandlerService {
     for (const column of obj) {
       if (data[column.name]) {
         //assuming any row would begin with a serial pk
-        result.push(this.__getBufferByType(data[column.name], column.type));
+        result.push(
+          this.__getBufferByType(data[column.name], column.type, column.serial),
+        );
       }
       result.push(Buffer.from(String('|'), 'utf-8'));
     }
@@ -107,7 +118,7 @@ export class TableHandlerService {
       prevVersionSize = -1;
     }
     result.push(
-      this.__getBufferByType(prevVersion.toString(), 'serial' as Type),
+      this.__getBufferByType(prevVersion.toString(), 'offset-serial' as Type),
     );
     result.push(
       this.__getBufferByType(prevVersionSize.toString(), 'int' as Type),
