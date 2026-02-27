@@ -391,7 +391,7 @@ export class FileHandlerService {
       fileBuf,
       this.schemaObj[tablename],
     );
-    if (rowObj['deleted'] === undefined) {
+    if (rowObj['deleted'] !== undefined) {
       throw new Error(`the row with id: ${id} was deleted`);
     }
     let filteredRowObj = {};

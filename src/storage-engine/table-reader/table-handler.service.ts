@@ -16,15 +16,17 @@ export class TableHandlerService {
     const result = {};
     const { buffer, bytesRead } = bufferObj;
     //buffer must end at the end of the column (the index file solution)
-    if (buffer.readUInt8(bytesRead - 1) === 1)
-      return {
-        deleted: true,
-      };
     const prevVersion = Number(buffer.readBigInt64LE(bytesRead - (1 + 4 + 8)));
     const prevVersionSize = buffer.readInt32LE(bytesRead - (1 + 4));
     result['prevVersion'] = prevVersion === -1 ? undefined : prevVersion;
     result['prevVersionSize'] =
       prevVersionSize === -1 ? undefined : prevVersionSize;
+    if (buffer.readUInt8(bytesRead - 1) === 1)
+      return {
+        deleted: true,
+        prevVersion,
+        prevVersionSize,
+      };
     let cellStart = 0;
     // result['internalRowId'] = this.__getDataByType(buffer, 0, 8, 'SERIAL');
     // cellStart = 8;

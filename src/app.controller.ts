@@ -55,7 +55,7 @@ export class AppController {
     try {
       return {
         success: true,
-        data: await this.storage.setSchemaHistory(body.id),
+        data: await this.storage.setSchemaVersion(body.id),
       };
     } catch (err) {
       return {
