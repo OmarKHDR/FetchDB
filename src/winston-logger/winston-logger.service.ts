@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import winston from 'winston';
+import { config, addColors } from 'winston';
 
 @Injectable()
 export class WinstonLoggerService {
@@ -20,9 +21,10 @@ export class WinstonLoggerService {
           level: 'debug',
           format: winston.format.combine(
             winston.format.timestamp({ format: 'HH:mm:ss' }),
+            winston.format.colorize({}),
             winston.format.printf(
               ({ context, timestamp, level, message }) =>
-                `[${context as string}] - ${timestamp as string} - [${level.toUpperCase()}] ${message as string}`,
+                `[${context as string}] - ${timestamp as string} - [${level}] ${message as string}`,
             ),
           ),
         }),
@@ -32,13 +34,28 @@ export class WinstonLoggerService {
           format: winston.format.combine(
             winston.format.timestamp({ format: 'DD/MM/YYYY@hh:mm:ss' }),
             winston.format.printf(
-              ({ context, timestamp, level, message }) =>
-                `[${context as string}] - ${timestamp as string} - [${level.toUpperCase()}] ${message as string}`,
+              ({
+                statementType,
+                schemaVersion,
+                context,
+                timestamp,
+                level,
+                message,
+              }) =>
+                JSON.stringify({
+                  timestamp,
+                  context: context || 'Database',
+                  level: level.toUpperCase(),
+                  statement: (message as string).trim(),
+                  statementType: statementType,
+                  schemaVersion: schemaVersion,
+                }),
             ),
           ),
         }),
       ],
     });
+    addColors({ ...config.syslog.colors, queries: config.syslog.colors.debug });
   }
 
   warn(message: string, context?: string) {
@@ -56,7 +73,16 @@ export class WinstonLoggerService {
   debug(message: string, context?: string) {
     this.logger.debug(` ${message}`, { context });
   }
-  query(message: string, context?: string) {
-    this.logger.queries(` ${message}`, { context });
+  query(
+    message: string,
+    statementType: 'DML' | 'DDL',
+    schemaVersion: number,
+    context?: string,
+  ) {
+    this.logger.queries(` ${message}`, {
+      context,
+      schemaVersion,
+      statementType,
+    });
   }
 }

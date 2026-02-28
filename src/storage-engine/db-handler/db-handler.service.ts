@@ -16,7 +16,7 @@ export class DbHandlerService {
     try {
       await fs.mkdir(this.rootDir);
     } catch (err) {
-      this.winston.logger.error(err);
+      this.winston.error(err, 'setupDataDirectory');
     }
   }
 }

@@ -72,4 +72,8 @@ export class StorageEngineService {
   async setSchemaVersion(v: number) {
     await this.filehander.setSchemaVersion(v);
   }
+
+  async getRowHistory(tablename: string, id: number) {
+    return await this.filehander.getRowHistory(tablename, id);
+  }
 }

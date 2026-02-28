@@ -2,21 +2,8 @@ import { Body, Controller, Get, Post } from '@nestjs/common';
 import { SqlInterpreterService } from './sql-interpreter/sql-interpreter.service';
 import { WinstonLoggerService } from './winston-logger/winston-logger.service';
 import { StorageEngineService } from './storage-engine/storage-engine.service';
-import {
-  ApiBody,
-  ApiConsumes,
-  ApiOperation,
-  ApiProperty,
-} from '@nestjs/swagger';
-
-class setVersionDto {
-  @ApiProperty({ type: 'number' })
-  version: number;
-}
-class selectRowDto {
-  @ApiProperty({ type: 'number' })
-  id: number;
-}
+import { ApiBody, ApiConsumes, ApiOperation } from '@nestjs/swagger';
+import { selectRowDto, setVersionDto } from './shared/dto/history.dto';
 
 @Controller()
 export class AppController {
@@ -51,13 +38,18 @@ export class AppController {
   })
   @Post('/execute/dml')
   async executeDML(@Body() body: string) {
-    this.winston.logger.info(`[AppController]: recieved query: ${body}`);
+    this.winston.info(
+      `hit /execute/dml endpoint with Query: ${body}`,
+      'executeDML',
+    );
+    this.winston.info(`recieved query: ${body}`, 'executeDML');
     try {
       return {
         success: true,
         ...(await this.interpreter.interpretDML(body)),
       };
     } catch (err) {
+      this.winston.error(err, 'executeDML');
       return { success: false, message: err.message };
     }
   }
@@ -77,12 +69,17 @@ export class AppController {
   @ApiConsumes('text/plain')
   @Post('/execute/ddl')
   async executeDDL(@Body() body: string) {
+    this.winston.info(
+      `hit /execute/ddl endpoint with Query: ${body}`,
+      'executeDDL',
+    );
     try {
       return {
         success: true,
         ...(await this.interpreter.interpretDDL(body)),
       };
     } catch (err) {
+      this.winston.error(err, 'executeDDL');
       return { success: false, message: err.message };
     }
   }
@@ -90,12 +87,14 @@ export class AppController {
   @ApiOperation({ description: 'get an array of schema history' })
   @Get('/history')
   async getSchemaHistory() {
+    this.winston.info(`hit /history endpoint`, 'executeDDL');
     try {
       return {
         success: true,
         data: await this.storage.getSchemaHistory(),
       };
     } catch (err) {
+      this.winston.error(err, 'executeDDL');
       return {
         success: false,
         message: err.message,
@@ -109,12 +108,17 @@ export class AppController {
   @ApiBody({ type: setVersionDto })
   @Post('/version')
   async setSchemaVersion(@Body() body: { version: number }) {
+    this.winston.info(
+      `hit /version endpoint with version: ${body.version}`,
+      'setSchemaVersion',
+    );
     try {
       return {
         success: true,
         data: await this.storage.setSchemaVersion(body.version),
       };
     } catch (err) {
+      this.winston.error(err, 'setSchemaVersion');
       return {
         success: false,
         message: err.message,
@@ -127,5 +131,22 @@ export class AppController {
   })
   @ApiBody({ type: selectRowDto })
   @Post('/data/history')
-  async getDataHistory() {}
+  async getDataHistory(@Body() body: selectRowDto) {
+    this.winston.info(
+      `hit /data/history endpoint with Query: table=${body.tablename} and id=${body.id}`,
+      'getDataHistory',
+    );
+    try {
+      return {
+        success: true,
+        data: await this.storage.getRowHistory(body.tablename, body.id),
+      };
+    } catch (err) {
+      this.winston.error(err, 'AppController');
+      return {
+        success: false,
+        message: err.message,
+      };
+    }
+  }
 }

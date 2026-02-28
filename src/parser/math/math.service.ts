@@ -46,9 +46,6 @@ export class MathService {
     state: Expression,
     maxPriority: number = -1,
   ): ExprRes | string {
-    this.winston.logger.info(
-      `recieved logical expression ${state.tokens.slice(state.cursor).join(' ')}`,
-    );
     let lhs = this.__handleLHS(state); // handle the (), not or token and return the value;
     let rhs: ExprRes | string;
     // {lhs: {lhs: 5, op: *, rhs: 6}, op: +, rhs:2}
@@ -98,5 +95,61 @@ export class MathService {
       else nestedState.tokens.push(token);
     }
     return this.parseExpression(nestedState);
+  }
+
+  convertToType(str: string) {
+    if (str.startsWith('"') || str.startsWith("'")) {
+      return { value: str.slice(1, str.length - 1), type: 'string' };
+    } else if (!isNaN(Number(str))) {
+      return { value: Number(str), type: 'number' };
+    } else {
+      return { value: str, type: 'column' };
+    }
+  }
+
+  compare(where: ExprRes | string, rowObj: Record<string, string>) {
+    if (typeof where === 'string') {
+      const typed = this.convertToType(where);
+      if (typed.type === 'column') {
+        if (!(typed.value in rowObj)) {
+          throw new Error(`can't find relation ${typed.value}`);
+        }
+        if (
+          typeof rowObj[typed.value] === 'string' &&
+          (rowObj[typed.value].startsWith('"') ||
+            rowObj[typed.value].startsWith("'"))
+        ) {
+          return rowObj[typed.value].slice(1, rowObj[typed.value].length - 1);
+        }
+        return Number(rowObj[typed.value]) || rowObj[typed.value];
+      }
+      return typed.value;
+    }
+    const left = this.compare(where.lhs, rowObj);
+    const right = this.compare(where.rhs, rowObj);
+    switch (where.operator) {
+      case '=':
+        return left === right;
+      case '>':
+        return left > right;
+      case '<':
+        return left < right;
+      case 'and':
+        return (left && right) as boolean;
+      case 'or':
+        return (left || right) as boolean;
+      case 'not':
+        return !right;
+      case '+':
+        return (left + right) as number;
+      case '-':
+        return left - right;
+      case '*':
+        return left * right;
+      case '/':
+        return left / right;
+      default:
+        throw new Error('this operator wasnt implemented yet');
+    }
   }
 }

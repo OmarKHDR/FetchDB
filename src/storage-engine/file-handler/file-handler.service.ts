@@ -6,8 +6,9 @@ import path from 'path';
 import { WinstonLoggerService } from '../../winston-logger/winston-logger.service';
 import { MutexService } from '../mutex/mutex.service';
 import { TableHandlerService } from '../table-reader/table-handler.service';
-import { ExprRes } from 'src/parser/math/math.service';
-import { cp } from 'fs';
+import { ExprRes, MathService } from 'src/parser/math/math.service';
+import { dataVersions } from '../types/versions.type';
+import { ValidatorService } from 'src/shared/validator.service';
 
 @Injectable()
 export class FileHandlerService {
@@ -23,10 +24,12 @@ export class FileHandlerService {
     private tableHandler: TableHandlerService,
     private winston: WinstonLoggerService,
     private mutex: MutexService,
+    private math: MathService,
+    private validator: ValidatorService,
   ) {}
 
   async onModuleInit() {
-    this.winston.logger.info(`shcema file already exists`);
+    this.winston.info(`shcema file already exists`);
     this.schema = await this.createSchemaFiles();
     this.schemaVersion = await this.getLatestVersion();
     this.winston.info(
@@ -47,7 +50,7 @@ export class FileHandlerService {
         }
       }
     }
-    await this.cleanDB();
+    // await this.cleanDB();
   }
   async onModuleDistroy() {
     for (const table in this.tables) {
@@ -66,17 +69,6 @@ export class FileHandlerService {
         await this.tables[table].index.truncate(
           indexFileSize - (indexFileSize % 12),
         );
-        continue;
-      }
-      const lastIndex = await this.tables[table].index.read({
-        position: (indexFileSize / 12 - 1) * 12,
-        length: 12,
-      });
-      const index = this.tableHandler.indexReader(lastIndex);
-      const tableSize = (await this.tables[table].table.stat()).size;
-      if (Number(index.index) + index.rowLength !== tableSize) {
-        await this.tables[table].index.truncate(indexFileSize - 12);
-        await this.tables[table].table.truncate(Number(index.index));
       }
     }
   }
@@ -191,6 +183,10 @@ export class FileHandlerService {
     this.schemaVersion += steps;
   }
 
+  getSchemaVersion() {
+    return this.schemaVersion;
+  }
+
   async setSchemaVersion(v: number) {
     this.schemaObj = await this.__readSchemaFile(v);
   }
@@ -249,7 +245,14 @@ export class FileHandlerService {
         // no names provided for columns and columns matches schema
         let i = 0;
         for (const column of this.schemaObj[tablename]) {
-          await this.constraintsValidator(tablename, column, values[i]);
+          let valExist = false;
+          if (column.IsUnique)
+            valExist = await this.valueExists(
+              tablename,
+              column.name,
+              values[i],
+            );
+          this.validator.constraintsValidator(column, values[i], valExist);
           row[column.name] = values[i++];
         }
       }
@@ -257,7 +260,14 @@ export class FileHandlerService {
       for (const column of this.schemaObj[tablename]) {
         if (columns.includes(column.name)) {
           const index = columns.indexOf(column.name);
-          await this.constraintsValidator(tablename, column, values[index]);
+          let valExist = false;
+          if (column.IsUnique)
+            valExist = await this.valueExists(
+              tablename,
+              column.name,
+              values[index],
+            );
+          this.validator.constraintsValidator(column, values[index], valExist);
           row[column.name] = values[index];
         } else {
           if (column.default) row[column.name] = column.default;
@@ -270,47 +280,32 @@ export class FileHandlerService {
             row[column.name] = String(column.serial++);
           } else if (!column.IsNullable) {
             throw new Error(`value for column ${column.name} must be setten`);
-          } else {
-            row[column.name] = 'null';
           }
         }
       }
     }
-    console.log(row, this.schemaObj[tablename]);
-    return this.tableHandler.dataToTableBuffer(row, this.schemaObj[tablename]);
+    return this.tableHandler.dataToTableBuffer(
+      row,
+      {},
+      this.schemaObj[tablename],
+    );
   }
 
-  async valueExists(tablename: string, column: string, value: string) {
+  async valueExists(
+    tablename: string,
+    column: string,
+    value: string,
+    ignoreId?: number,
+  ) {
     const matches = await this.getMatchedRows(tablename, '*', {
       lhs: column,
       operator: '=',
       rhs: value,
     });
-    if (matches.length) return true;
-    else return false;
-  }
-
-  validateType(t: Type, value: string) {
-    try {
-      switch (t) {
-        case 'float':
-          parseFloat(value);
-          return;
-        case 'int':
-          parseInt(value);
-          return;
-        case 'serial':
-          BigInt(value);
-          return;
-        case 'timestamp':
-          if (new Date(value).getTime() > 0) return;
-          else throw new Error('');
-        case 'varchar':
-          return;
-      }
-    } catch (err) {
-      throw new Error(`Type Violation: ${value} should have been of type ${t}`);
-    }
+    if (matches.length && ignoreId) {
+      if (matches.length === 1 && matches[0]['id'] === ignoreId) return false;
+      return true;
+    } else return false;
   }
 
   async writeToTable(
@@ -368,7 +363,7 @@ export class FileHandlerService {
     }
     return result;
   }
-  async readEqId(tablename: string, columns: Array<string> | '*', id: number) {
+  async readEqId(tablename: string, id: number) {
     if (id < 0)
       throw new Error(`Type Violation: the SERIAL id can't go below zero`);
     const indexOffset = id * 12;
@@ -391,25 +386,7 @@ export class FileHandlerService {
       fileBuf,
       this.schemaObj[tablename],
     );
-    if (rowObj['deleted'] !== undefined) {
-      throw new Error(`the row with id: ${id} was deleted`);
-    }
-    let filteredRowObj = {};
-    if (typeof columns === 'string' && columns === '*') {
-      delete rowObj['prevVersion'];
-      delete rowObj['prevVersionSize'];
-      filteredRowObj = rowObj;
-    } else {
-      for (const column of columns) {
-        if (rowObj[column] === undefined)
-          throw new Error(
-            `relation ${column} doesn't exist on table ${tablename}`,
-          );
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        filteredRowObj[column] = rowObj[column];
-      }
-    }
-    return filteredRowObj;
+    return rowObj;
   }
 
   async getMatchedRows(
@@ -432,10 +409,12 @@ export class FileHandlerService {
         endPos = indexCount;
       } else if (options.op === '<' || options.op === '<=') {
         startPos = 0;
-        endPos = Math.min(options.id, indexCount * 12);
+        endPos = Math.min(options.id, indexCount);
       } else if (options.op === '=') {
         if (options.id >= indexCount) return [];
-        return [await this.readEqId(tablename, columns, options.id)];
+        const rowObj = await this.readEqId(tablename, options.id);
+        if (rowObj['deleted'] !== undefined) return [];
+        return [this.validator.filterObject(tablename, rowObj, columns)];
       } else {
         startPos = 0;
         endPos = indexCount;
@@ -461,84 +440,24 @@ export class FileHandlerService {
       if (rowObj['deleted']) {
         continue;
       }
-      let filteredRowObj = {};
-      if (typeof columns === 'string' && columns === '*') {
-        delete rowObj['prevVersion'];
-        delete rowObj['prevVersionSize'];
-        filteredRowObj = rowObj;
-      } else {
-        for (const column of columns) {
-          if (rowObj[column] === undefined)
-            throw new Error(
-              `relation ${column} doesn't exist on table ${tablename}`,
-            );
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          filteredRowObj[column] = rowObj[column];
-        }
-      }
+      this.winston.info(`Column to check:`);
+      console.log(rowObj);
+      const filteredRowObj = this.validator.filterObject(
+        tablename,
+        rowObj,
+        columns,
+      );
+      this.winston.info(`filtered column:`);
+      console.log(filteredRowObj);
       if (!where) {
         resRows.push(filteredRowObj);
-      } else if (this.compare(where, rowObj)) {
+      } else if (this.math.compare(where, rowObj)) {
         resRows.push(filteredRowObj);
       }
     }
     return resRows;
   }
 
-  compare(where: ExprRes | string, rowObj: Record<string, string>) {
-    if (typeof where === 'string') {
-      const typed = this.convertToType(where);
-      if (typed.type === 'column') {
-        if (!(typed.value in rowObj)) {
-          throw new Error(`can't find relation ${typed.value}`);
-        }
-        if (
-          typeof rowObj[typed.value] === 'string' &&
-          (rowObj[typed.value].startsWith('"') ||
-            rowObj[typed.value].startsWith("'"))
-        ) {
-          return rowObj[typed.value].slice(1, rowObj[typed.value].length - 1);
-        }
-        return Number(rowObj[typed.value]) || rowObj[typed.value];
-      }
-      return typed.value;
-    }
-    const left = this.compare(where.lhs, rowObj);
-    const right = this.compare(where.rhs, rowObj);
-    switch (where.operator) {
-      case '=':
-        return left === right;
-      case '>':
-        return left > right;
-      case '<':
-        return left < right;
-      case 'and':
-        return (left && right) as boolean;
-      case 'or':
-        return (left || right) as boolean;
-      case 'not':
-        return !right;
-      case '+':
-        return (left + right) as number;
-      case '-':
-        return left - right;
-      case '*':
-        return left * right;
-      case '/':
-        return left / right;
-      default:
-        throw new Error('this operator wasnt implemented yet');
-    }
-  }
-  convertToType(str: string) {
-    if (str.startsWith('"') || str.startsWith("'")) {
-      return { value: str.slice(1, str.length - 1), type: 'string' };
-    } else if (!isNaN(Number(str))) {
-      return { value: Number(str), type: 'number' };
-    } else {
-      return { value: str, type: 'column' };
-    }
-  }
   async readIndexList(tablename: string, startPos: number, endPos: number) {
     const result: Array<{ index: bigint; rowLength: number }> = [];
     const bufObj = await this.tables[tablename].index.read({
@@ -564,31 +483,38 @@ export class FileHandlerService {
     columns: Array<string>,
     values: Array<string>,
   ) {
+    this.winston.info(`trying to update columns`);
     //for each matched row we will update the values of the object, then append values, and change the prevVersion, prevVersionSize, and the index info
     const rows = await this.getMatchedRows(tablename, '*', where);
-    const updatedRows: Array<object> = [];
-    for (const row of rows) {
-      for (const column of this.schemaObj[tablename]) {
-        const valIndex = columns.indexOf(column.name);
-        if (valIndex === -1) continue;
-        if (column.name === 'id')
-          throw new Error(`Violation of DB design, cannot change the id`);
-        await this.constraintsValidator(tablename, column, values[valIndex]);
-        row[column.name] = values[valIndex];
-      }
 
-      // going to the index get past size and pos
-      // that makes it getting the whole index 12 byte to append to the buffer, so we dont need to calculate past data
-      // only replace the current index with the current row
-      const resolver = await this.mutex.acquireMutex(tablename);
-      try {
+    const updatedRows: Array<object> = [];
+    const resolver = await this.mutex.acquireMutex(tablename);
+    try {
+      for (const row of rows) {
+        const oldRow = { ...row };
         const index = await this.readIndexList(
           tablename,
           Number(row['id']),
           Number(row['id']) + 1,
         );
+        for (const column of this.schemaObj[tablename]) {
+          const valIndex = columns.indexOf(column.name);
+          if (valIndex === -1) continue;
+          if (column.name === 'id')
+            throw new Error(`Violation of DB design, cannot change the id`);
+          const exists = await this.valueExists(
+            tablename,
+            column.name,
+            values[valIndex],
+            Number(row['id']),
+          );
+          this.validator.constraintsValidator(column, values[valIndex], exists);
+          row[column.name] = values[valIndex];
+        }
+
         const buff = this.tableHandler.dataToTableBuffer(
           row,
+          oldRow,
           this.schemaObj[tablename],
           index[0].index,
           index[0].rowLength,
@@ -604,32 +530,13 @@ export class FileHandlerService {
         delete row['prevVersion'];
         delete row['prevVersionSize'];
         updatedRows.push(row);
-      } catch (err) {
-        this.winston.error(`${err}`, 'FileHandler');
-      } finally {
-        resolver('final');
       }
-      return updatedRows;
+    } catch (err) {
+      this.winston.error(`${err}`, 'FileHandler');
+    } finally {
+      resolver('final');
     }
-  }
-
-  async constraintsValidator(tablename: string, column: Column, value: string) {
-    if (column.IsNullable && value === 'null')
-      throw new Error(`Constraint Violation: ${column.name} can't be null`);
-    this.validateType(column.type, value);
-    if (
-      column.IsUnique &&
-      (await this.valueExists(tablename, column.name, value))
-    )
-      throw new Error(`Constraint Violation: Unique constraints violation`);
-    if (column.type === 'varchar') {
-      if (value.length - 2 > (column.varcharLimit || 65535)) {
-        throw new Error(
-          `Constraint Violation: VARCHAR limit exceeded current limit is: ${column.varcharLimit}, found: ${value.length - 2}`,
-        );
-      }
-    }
-    //checking for fk relations
+    return updatedRows;
   }
 
   async replaceIndex(
@@ -662,6 +569,7 @@ export class FileHandlerService {
         );
         const buff = this.tableHandler.dataToTableBuffer(
           row,
+          {},
           this.schemaObj[tablename],
           index[0].index,
           index[0].rowLength,
@@ -680,7 +588,41 @@ export class FileHandlerService {
       } finally {
         resolver('final');
       }
-      return updatedRows;
     }
+    return updatedRows;
+  }
+
+  async getRowHistory(tablename: string, id: number) {
+    //recive one id and it will get the row by id then lets see what happens
+    //lets loop through the versions
+    const result: Array<object> = [];
+    const row: dataVersions = await this.readEqId(tablename, id);
+    let prevVersion: dataVersions = {
+      prevVersion: row['prevVersion'],
+      prevVersionSize: row['prevVersionSize'],
+    };
+    console.log(row);
+    delete row['prevVersion'];
+    delete row['prevVersionSize'];
+    result.push(row);
+    while (prevVersion['prevVersion'] !== undefined) {
+      console.log(prevVersion);
+      const buff = await this.tables[tablename].table.read({
+        position: Number(prevVersion['prevVersion']),
+        length: prevVersion['prevVersionSize'],
+      });
+      const rowObj: dataVersions = this.tableHandler.tableBufferToObject(
+        buff,
+        this.schemaObj[tablename],
+      );
+      prevVersion = {
+        prevVersion: rowObj['prevVersion'],
+        prevVersionSize: rowObj['prevVersionSize'],
+      };
+      delete rowObj['prevVersion'];
+      delete rowObj['prevVersionSize'];
+      result.push(rowObj);
+    }
+    return result;
   }
 }

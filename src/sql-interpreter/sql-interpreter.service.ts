@@ -10,19 +10,26 @@ import {
   ASTUpdate,
 } from 'src/parser/types/trees';
 import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
+import { FileHandlerService } from 'src/storage-engine/file-handler/file-handler.service';
 @Injectable()
 export class SqlInterpreterService {
   constructor(
     private lexer: LexerService,
     private parser: ParserService,
     private storageEngine: StorageEngineService,
+    private fileHandler: FileHandlerService,
     private winston: WinstonLoggerService,
   ) {}
 
   async interpretDML(sqlquery: string) {
     const tokens = this.lexer.tokinize(sqlquery);
     const ASTobj = this.parser.identify(tokens);
-    this.winston.query(tokens.join(' '), 'DML INTERPRETER');
+    this.winston.query(
+      tokens.join(' '),
+      'DML',
+      this.fileHandler.getSchemaVersion(),
+      'DML Interpreter',
+    );
     switch (ASTobj.statement) {
       case 'insert':
         return {
@@ -56,7 +63,12 @@ export class SqlInterpreterService {
   async interpretDDL(sqlquery: string) {
     const tokens = this.lexer.tokinize(sqlquery);
     const ASTobj = this.parser.identify(tokens);
-    this.winston.query(tokens.join(' '), 'DDL INTERPRETER');
+    this.winston.query(
+      tokens.join(' '),
+      'DDL',
+      this.fileHandler.getSchemaVersion(),
+      'DDL Interpreter',
+    );
     switch (ASTobj.statement) {
       case 'create':
         await this.storageEngine.createTable(ASTobj as ASTCreate);

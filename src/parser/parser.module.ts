@@ -9,6 +9,6 @@ import { WinstonLoggerModule } from 'src/winston-logger/winston-logger.module';
 @Module({
   imports: [SharedModule, WinstonLoggerModule],
   providers: [ParserService, MathService, DDLParser, DMLParser],
-  exports: [ParserService],
+  exports: [ParserService, MathService],
 })
 export class ParserModule {}

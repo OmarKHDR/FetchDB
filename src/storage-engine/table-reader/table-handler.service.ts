@@ -11,29 +11,30 @@ export class TableHandlerService {
   constructor(private winston: WinstonLoggerService) {}
   tableBufferToObject(
     bufferObj: { buffer: Buffer; bytesRead: number },
-    obj: Column[],
+    columns: Column[],
   ) {
     const result = {};
     const { buffer, bytesRead } = bufferObj;
-    //buffer must end at the end of the column (the index file solution)
+
     const prevVersion = Number(buffer.readBigInt64LE(bytesRead - (1 + 4 + 8)));
     const prevVersionSize = buffer.readInt32LE(bytesRead - (1 + 4));
+
     result['prevVersion'] = prevVersion === -1 ? undefined : prevVersion;
     result['prevVersionSize'] =
       prevVersionSize === -1 ? undefined : prevVersionSize;
+
     if (buffer.readUInt8(bytesRead - 1) === 1)
       return {
         deleted: true,
         prevVersion,
         prevVersionSize,
       };
+
     let cellStart = 0;
-    // result['internalRowId'] = this.__getDataByType(buffer, 0, 8, 'SERIAL');
-    // cellStart = 8;
-    for (const column of obj) {
+    for (const column of columns) {
       const cellEnd = buffer.indexOf(0x7c, cellStart);
       if (cellEnd === cellStart) {
-        result[column.name] = 'null';
+        result[column.name] = '"null"';
         cellStart++;
         continue;
       }
@@ -67,6 +68,9 @@ export class TableHandlerService {
 
   __getBufferByType(data: string, type: Type, nextSerial?: number) {
     let buffer: Buffer;
+    if (data === undefined) {
+      return Buffer.from(String(''), 'utf-8');
+    }
     switch (type) {
       case 'varchar':
         return Buffer.from(String(data), 'utf-8');
@@ -99,18 +103,29 @@ export class TableHandlerService {
   }
 
   dataToTableBuffer(
-    data: Record<string, string>,
-    obj: Column[],
+    newData: Record<string, string>,
+    oldData: Record<string, string>,
+    columns: Column[],
     prevVersion?: bigint,
     prevVersionSize?: number,
     deleteRow?: boolean,
   ) {
     const result: Buffer[] = [];
-    for (const column of obj) {
-      if (data[column.name]) {
-        //assuming any row would begin with a serial pk
+    for (const column of columns) {
+      if (
+        newData[column.name] !== undefined ||
+        oldData[column.name] !== undefined
+      ) {
+        //assuming any row would begin with a serial
+        this.winston.info(
+          `trying to add ${newData[column.name]} into ${column.name}`,
+        );
         result.push(
-          this.__getBufferByType(data[column.name], column.type, column.serial),
+          this.__getBufferByType(
+            newData[column.name] ?? oldData[column.name],
+            column.type,
+            column.serial,
+          ),
         );
       }
       result.push(Buffer.from(String('|'), 'utf-8'));
