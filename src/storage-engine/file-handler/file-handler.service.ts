@@ -1,14 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import fs from 'fs/promises';
 import { DbHandlerService } from '../db-handler/db-handler.service';
-import { Column, Type } from '../types/column.type';
-import path from 'path';
+import { Column } from '../types/column.type';
 import { WinstonLoggerService } from '../../winston-logger/winston-logger.service';
 import { MutexService } from '../mutex/mutex.service';
-import { TableHandlerService } from '../table-reader/table-handler.service';
+import { BufferManagerService } from '../buffer-manager/buffer-manager.service';
 import { ExprRes, MathService } from 'src/parser/math/math.service';
 import { dataVersions } from '../types/versions.type';
-import { ValidatorService } from 'src/shared/validator.service';
+import { ValidatorService } from 'src/storage-engine/helper/validator.service';
+import { StorageStrategyService } from '../storage-strategy/storage-strategy.service';
+import { ObjectHandlerService } from '../helper/object-handler.service';
 
 @Injectable()
 export class FileHandlerService {
@@ -21,24 +22,31 @@ export class FileHandlerService {
   > = {};
   constructor(
     private dbHandler: DbHandlerService,
-    private tableHandler: TableHandlerService,
+    private bufferHandler: BufferManagerService,
     private winston: WinstonLoggerService,
     private mutex: MutexService,
     private math: MathService,
     private validator: ValidatorService,
+    private storageStrategy: StorageStrategyService,
+    private objectHandler: ObjectHandlerService,
   ) {}
 
   async onModuleInit() {
     this.winston.info(`shcema file already exists`);
-    this.schema = await this.createSchemaFiles();
+    this.schema = await this.storageStrategy.createSchemaFiles(
+      this.dbHandler.rootDir,
+    );
     this.schemaVersion = await this.getLatestVersion();
     this.winston.info(
       `current schema version: ${this.schemaVersion}`,
       'FileHandler',
     );
-    this.schemaObj = await this.__readSchemaFile();
+    this.schemaObj = await this.readSchema();
     for (const table in this.schemaObj) {
-      this.tables[table] = await this.__openTable(table);
+      this.tables[table] = await this.storageStrategy.openTable(
+        this.dbHandler.rootDir,
+        table,
+      );
       for (const column of this.schemaObj[table]) {
         if (column.type === 'serial') {
           column.serial = Math.trunc(
@@ -74,86 +82,40 @@ export class FileHandlerService {
   }
 
   async getAllSchema() {
-    const result: Array<{ index: bigint; rowLength: number }> = [];
     const end = await this.getLatestVersion();
     const bufObj = await this.schema.index.read({
       position: 0 * 12,
       length: end * 12,
     });
-    for (let i = 0; i < end; i++) {
-      result.push(
-        this.tableHandler.indexReader({
-          buffer: bufObj.buffer.subarray(i * 12, i * 12 + 12),
-          bytesRead: 12,
-        }),
-      );
-    }
+    const schemaArray = await this.storageStrategy.readRowsFromIndexBuffer(
+      bufObj,
+      this.schema.schema,
+      end,
+      12,
+    );
     const schemas: Array<Record<string, Array<Column>>> = [];
-    for (const index of result) {
-      const fileBuf = await this.schema['schema'].read({
-        position: index.index,
-        length: index.rowLength,
-      });
-
+    for (const schemaBuff of schemaArray) {
       schemas.push(
-        JSON.parse(
-          fileBuf.buffer.toString('utf-8', 0, fileBuf.bytesRead) || '{}',
-        ) as Record<string, Array<Column>>,
+        JSON.parse(schemaBuff.toString('utf-8') || '{}') as Record<
+          string,
+          Array<Column>
+        >,
       );
     }
     return schemas;
   }
 
-  async createSchemaFiles() {
-    const schemaPath = path.join(this.dbHandler.rootDir, `schema.vjson`);
-    const schemaIndexPath = path.join(this.dbHandler.rootDir, `schema.index`);
-    const schemafd = await this.createFileIfNotExists(schemaPath);
-    const indexfd = await this.createFileIfNotExists(schemaIndexPath);
-    if (!schemafd || !indexfd) throw new Error(`couldn't open the schema file`);
-    return {
-      schema: schemafd,
-      index: indexfd,
-    };
-  }
-  async __openTable(tablename: string) {
-    const tablePath = path.join(this.dbHandler.rootDir, `${tablename}.data`);
-    const indexPath = path.join(this.dbHandler.rootDir, `${tablename}.index`);
-    let indexfd: fs.FileHandle;
-    const tablefd = await this.createFileIfNotExists(tablePath);
-    try {
-      indexfd = await this.createFileIfNotExists(indexPath, 'r+');
-    } catch (err) {
-      if (err.code === 'ENOENT')
-        indexfd = await this.createFileIfNotExists(indexPath, 'w+');
-      else throw err;
-    }
-    if (!tablefd || !indexfd)
-      throw new Error(`couldn't open the table: ${tablename}`);
-    return {
-      table: tablefd,
-      index: indexfd,
-    };
-  }
-  async createFileIfNotExists(filepath: string, mode = 'a+') {
-    try {
-      const filehandler = await fs.open(filepath, mode);
-      return filehandler;
-    } catch (err) {
-      this.winston.error(`${err}`, 'FileHandler');
-      throw err;
-    }
-  }
-
-  async __updateSchema(obj: Record<string, Column[]>) {
-    const tables = await this.__readSchemaFile();
+  async updateSchema(obj: Record<string, Column[]>) {
+    const tables = await this.readSchema();
     for (const table in obj) {
       if (table in tables) throw new Error('table already exists');
       tables[table] = obj[table];
       for (const column of tables[table]) {
         if (column.type === 'serial') {
-          column.serial = Math.trunc(
-            (await this.tables[table].index.stat()).size / 12,
-          );
+          column.serial =
+            (await this.storageStrategy.getTableSize(
+              this.tables[table].index,
+            )) / 12;
           this.winston.info(
             `setting the column ${column.name} start to ${column.serial}`,
           );
@@ -163,11 +125,13 @@ export class FileHandlerService {
     const data = JSON.stringify(tables);
     this.schemaObj = tables;
 
-    const b = this.tableHandler.getAllocatedBuffer(0, 12);
+    const b = this.bufferHandler.getAllocatedBuffer(0, 12);
     b.writeInt32LE(data.length, 8);
     const resolver = await this.mutex.acquireMutex('schemahandler');
     try {
-      const dataOffset = (await this.schema['schema'].stat()).size;
+      const dataOffset = await this.storageStrategy.getTableSize(
+        this.schema.schema,
+      );
       b.writeBigInt64LE(BigInt(dataOffset));
       await this.schema['schema'].appendFile(data);
       await this.schema['index'].appendFile(b);
@@ -188,18 +152,19 @@ export class FileHandlerService {
   }
 
   async setSchemaVersion(v: number) {
-    this.schemaObj = await this.__readSchemaFile(v);
+    this.schemaObj = await this.readSchema(v);
   }
 
   async getLatestVersion() {
-    return Math.trunc((await this.schema['index'].stat()).size / 12);
+    return Math.trunc(
+      (await this.storageStrategy.getTableSize(this.schema.index)) / 12,
+    );
   }
 
-  async __readSchemaFile(version?: number) {
+  async readSchema(version?: number) {
     if (version === 0) throw new Error(`wdym by version 0 bro?!`);
     if (this.schemaVersion === 0) return {} as Record<string, Array<Column>>;
-    const indexOffset: number =
-      ((version ? version : this.schemaVersion) - 1) * 12;
+    const indexOffset: number = ((version ?? this.schemaVersion) - 1) * 12;
     const buf: { buffer: Buffer; bytesRead: number } = await this.schema[
       'index'
     ].read({
@@ -222,20 +187,26 @@ export class FileHandlerService {
     const tableObj: Record<string, Column[]> = {};
     tableObj[tablename] = tableSchema;
     try {
-      this.tables[tablename] = await this.__openTable(tablename);
+      this.tables[tablename] = await this.storageStrategy.openTable(
+        this.dbHandler.rootDir,
+        tablename,
+      );
+      await this.updateSchema(tableObj);
     } catch (err) {
+      await this.tables[tablename].table.close();
+      await this.tables[tablename].index.close();
+      delete this.tables[tablename];
       throw new Error(`couldn't create table file: ${err}`);
     }
-    await this.__updateSchema(tableObj);
     return tableObj;
   }
 
-  async __getTableBuffer(
+  async getTableBuffer(
     tablename: string,
     values: Array<string>,
     columns?: Array<string>,
   ) {
-    if (!this.tables[tablename])
+    if (!this.tables[tablename] || !this.schemaObj[tablename])
       throw new Error(`table ${tablename} doesn't exists`);
     const row: Record<string, string> = {};
     if (!columns || !columns.length) {
@@ -284,7 +255,7 @@ export class FileHandlerService {
         }
       }
     }
-    return this.tableHandler.dataToTableBuffer(
+    return this.bufferHandler.dataToTableBuffer(
       row,
       {},
       this.schemaObj[tablename],
@@ -313,16 +284,15 @@ export class FileHandlerService {
     values: Array<string>,
     columns?: Array<string>,
   ) {
-    const buffer = await this.__getTableBuffer(tablename, values, columns);
+    const buffer = await this.getTableBuffer(tablename, values, columns);
     const resolver = await this.mutex.acquireMutex(tablename);
     try {
-      const dataOffset = (await this.tables[tablename].table.stat()).size;
-      const b = this.tableHandler.getAllocatedBuffer(0, 12);
+      const dataOffset = await this.storageStrategy.getTableSize(
+        this.tables[tablename].table,
+      );
+      const b = this.bufferHandler.getAllocatedBuffer(0, 12);
       b.writeBigInt64LE(BigInt(dataOffset));
       b.writeInt32LE(buffer.length, 8);
-      //write to table first then index so we dont ruin the index file
-      // if write fails midway we need to detect that, so we can create a clean with each startup checks last
-      // row if it has valid index or not
       await this.tables[tablename].table.appendFile(buffer);
       await this.tables[tablename].index.appendFile(b);
     } catch (err) {
@@ -350,7 +320,7 @@ export class FileHandlerService {
     let s = 0;
     const result: Array<Record<string, string>> = [];
     for (const size of sizes) {
-      const obj = this.tableHandler.tableBufferToObject(
+      const obj = this.bufferHandler.tableBufferToObject(
         {
           buffer: bufObj.buffer.subarray(s, s + size),
           bytesRead: size,
@@ -382,7 +352,7 @@ export class FileHandlerService {
       length: dataLength,
     });
 
-    const rowObj = this.tableHandler.tableBufferToObject(
+    const rowObj = this.bufferHandler.tableBufferToObject(
       fileBuf,
       this.schemaObj[tablename],
     );
@@ -398,6 +368,9 @@ export class FileHandlerService {
       id: number;
     },
   ) {
+    if (!this.tables[tablename] || !this.schemaObj[tablename]) {
+      throw new Error(`this table doesnt exist on current schema version`);
+    }
     const indexCount = Math.trunc(
       (await this.tables[tablename].index.stat()).size / 12,
     );
@@ -414,7 +387,7 @@ export class FileHandlerService {
         if (options.id >= indexCount) return [];
         const rowObj = await this.readEqId(tablename, options.id);
         if (rowObj['deleted'] !== undefined) return [];
-        return [this.validator.filterObject(tablename, rowObj, columns)];
+        return [this.objectHandler.filterObject(tablename, rowObj, columns)];
       } else {
         startPos = 0;
         endPos = indexCount;
@@ -433,7 +406,7 @@ export class FileHandlerService {
         position: index.index,
         length: index.rowLength,
       });
-      const rowObj = this.tableHandler.tableBufferToObject(
+      const rowObj = this.bufferHandler.tableBufferToObject(
         row,
         this.schemaObj[tablename],
       );
@@ -442,7 +415,7 @@ export class FileHandlerService {
       }
       this.winston.info(`Column to check:`);
       console.log(rowObj);
-      const filteredRowObj = this.validator.filterObject(
+      const filteredRowObj = this.objectHandler.filterObject(
         tablename,
         rowObj,
         columns,
@@ -466,7 +439,7 @@ export class FileHandlerService {
     });
     for (let i = startPos; i < endPos; i++) {
       result.push(
-        this.tableHandler.indexReader({
+        this.bufferHandler.indexReader({
           buffer: bufObj.buffer.subarray(
             (i - startPos) * 12,
             (i - startPos) * 12 + 12,
@@ -512,8 +485,8 @@ export class FileHandlerService {
           row[column.name] = values[valIndex];
         }
 
-        const buff = this.tableHandler.dataToTableBuffer(
-          row,
+        const buff = this.bufferHandler.dataToTableBuffer(
+          row as Record<string, string>,
           oldRow,
           this.schemaObj[tablename],
           index[0].index,
@@ -545,7 +518,7 @@ export class FileHandlerService {
     buff: Buffer<ArrayBuffer>,
     offset: bigint,
   ) {
-    const b = this.tableHandler.getAllocatedBuffer(0, 12);
+    const b = this.bufferHandler.getAllocatedBuffer(0, 12);
     b.writeBigInt64LE(offset);
     b.writeInt32LE(buff.length, 8);
     await this.tables[tablename].index.write(b, 0, 12, id * 12);
@@ -567,7 +540,7 @@ export class FileHandlerService {
           Number(row['id']),
           Number(row['id']) + 1,
         );
-        const buff = this.tableHandler.dataToTableBuffer(
+        const buff = this.bufferHandler.dataToTableBuffer(
           row,
           {},
           this.schemaObj[tablename],
@@ -611,7 +584,7 @@ export class FileHandlerService {
         position: Number(prevVersion['prevVersion']),
         length: prevVersion['prevVersionSize'],
       });
-      const rowObj: dataVersions = this.tableHandler.tableBufferToObject(
+      const rowObj: dataVersions = this.bufferHandler.tableBufferToObject(
         buff,
         this.schemaObj[tablename],
       );

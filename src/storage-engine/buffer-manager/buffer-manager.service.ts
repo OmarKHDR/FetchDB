@@ -7,7 +7,7 @@ import { WinstonLoggerService } from '../../winston-logger/winston-logger.servic
 // assuming pk is always at the begining and is a serial
 // [pk-serial]|[data]|[data]|[data]|[prevVersion][prevVersionSize][deletedbyte]
 @Injectable()
-export class TableHandlerService {
+export class BufferManagerService {
   constructor(private winston: WinstonLoggerService) {}
   tableBufferToObject(
     bufferObj: { buffer: Buffer; bytesRead: number },

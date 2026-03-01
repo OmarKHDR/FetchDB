@@ -1,1 +1,0 @@
-{"users":[{"name":"id","type":"serial","IsNullable":false,"IsUnique":true,"IsPK":true,"serial":0},{"name":"name","type":"varchar","varcharLimit":22,"IsNullable":true,"IsUnique":false},{"name":"createdat","type":"timestamp","IsNullable":false,"IsUnique":false}]}
