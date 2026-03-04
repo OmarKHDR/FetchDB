@@ -21,6 +21,7 @@ export class DDLParser extends StatementParser {
       tablename: '',
       columns: [],
     };
+    // create table tablename ()
     this.eat(state);
     if (this.eat(state) !== 'table') throw new Error('not implemented');
     result['tablename'] = this.eat(state);
@@ -43,6 +44,7 @@ export class DDLParser extends StatementParser {
         this.eat(state);
         continue;
       }
+      // (name type primary key not null)
       const column: Column = {
         name: this.eat(state),
         type: this.eat(state) as Type,
