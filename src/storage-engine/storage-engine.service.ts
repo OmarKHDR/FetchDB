@@ -38,10 +38,7 @@ export class StorageEngineService {
     ) {
       options = {
         op: ASTtree.where.operator,
-        id:
-          ASTtree.where.lhs === '0' || ASTtree.where.rhs === '0'
-            ? 0
-            : Number(ASTtree.where.rhs) || Number(ASTtree.where.lhs),
+        id: (Number(ASTtree.where.rhs) || Number(ASTtree.where.lhs)) || 0,
       };
     }
     return await this.filehander.getMatchedRows(

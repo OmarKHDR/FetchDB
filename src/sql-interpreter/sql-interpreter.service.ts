@@ -53,10 +53,10 @@ export class SqlInterpreterService {
         };
       case 'create':
         throw new Error(
-          '[Interpreter Error]: This is a DDL statement call the /execute/ddl endpoint',
+          'Interpreter Error: This is a DDL statement call the /execute/ddl endpoint',
         );
       default:
-        throw new Error(`not implemented statement`);
+        throw new Error(`Not Implemented Error: This statement not implemented yet ${ASTobj.statement}`);
     }
   }
 
@@ -77,16 +77,12 @@ export class SqlInterpreterService {
           message: 'DDL generated and saved to schema files.',
         };
       case 'insert':
-        throw new Error(
-          '[Interpreter Error]: This is a DML statement call the /execute/dml endpoint',
-        );
       case 'select':
-        throw new Error(
-          '[Interpreter Error]: This is a DML statement call the /execute/dml endpoint',
-        );
+      case 'delete':
+      case 'update':
       default:
         throw new Error(
-          `[Interpreter Error]: This statement not implemented yet ${ASTobj.statement}`,
+          `Not Implemented Error: This statement not implemented yet ${ASTobj.statement}`,
         );
     }
   }

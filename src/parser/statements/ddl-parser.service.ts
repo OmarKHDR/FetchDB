@@ -5,7 +5,7 @@ import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service'
 import { Column, Type } from 'src/storage-engine/types/column.type';
 import { tokensParser } from '../types/token-parser.type';
 import { ASTCreate } from '../types/trees';
-import { cp } from 'fs';
+import { reserved_keywords } from 'src/shared/constants/keywords.constants';
 
 @Injectable()
 export class DDLParser extends StatementParser {
@@ -21,11 +21,12 @@ export class DDLParser extends StatementParser {
       tablename: '',
       columns: [],
     };
-    // create table tablename ()
+    this.winston.info(`handling the create statement`)
     this.eat(state);
     if (this.eat(state) !== 'table') throw new Error('not implemented');
     result['tablename'] = this.eat(state);
     result['columns'] = this.handleColumnDefinition(state);
+    this.winston.info(`parsed create statement: ${result}`)
     return result;
   }
 
@@ -43,6 +44,9 @@ export class DDLParser extends StatementParser {
       if (token === ',') {
         this.eat(state);
         continue;
+      }
+      if (reserved_keywords.includes(token)) {
+        throw new Error(`Syntax Error: unexpected keyword ${token.toUpperCase()}`)
       }
       // (name type primary key not null)
       const column: Column = {

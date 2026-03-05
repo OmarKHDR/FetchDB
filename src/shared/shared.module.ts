@@ -1,3 +1,7 @@
 import { Module } from '@nestjs/common';
-@Module({})
+import { StringManipulationService } from './string-manipulation.service';
+@Module({
+  providers: [StringManipulationService],
+  exports: [StringManipulationService],
+})
 export class SharedModule {}

@@ -51,6 +51,7 @@ export class DMLParser extends StatementParser {
       result['where'] = this.handleWhereClause(state);
     //if (this.peek(state) === 'group')
     //result['group'] = this.__handleGroubBy(state);
+    this.winston.info(`parsed select statement: ${result}`)
     return result;
   }
 
@@ -64,7 +65,7 @@ export class DMLParser extends StatementParser {
     result['tablename'] = this.handleFromClause(state);
     result['where'] = this.handleWhereClause(state);
     if (!result['where'])
-      throw new Error('ERROR: Delete statement must have a where filter');
+      throw new Error('Bad Request Errorr: Delete statement must have a where filter');
     else if (
       (typeof result['where'] === 'object' &&
         result['where'].lhs === result['where'].rhs &&
@@ -72,8 +73,9 @@ export class DMLParser extends StatementParser {
       (typeof result === 'string' && Boolean(Number(result)))
     )
       throw new Error(
-        'ERROR: DELETE FROM TABLENAME WHERE true; is not allowed',
+        'Bad Request Error: DELETE FROM TABLENAME WHERE true; is not allowed',
       );
+    this.winston.info(`parsed delete statement: ${result}`)
     return result;
   }
 
@@ -120,6 +122,7 @@ export class DMLParser extends StatementParser {
       if (this.peek(state) === ',') this.eat(state);
     }
     result['where'] = this.handleWhereClause(state);
+    this.winston.info(`parsed update statement: ${result}`)
     return result;
   }
 
@@ -176,6 +179,7 @@ export class DMLParser extends StatementParser {
       throw new Error('Syntax Error: columns and values must match in size');
     result.columnsNames = columnsNames;
     result.columnsValues = columnsValues;
+    this.winston.info(`parsed insert statement: ${result}`)
     return result;
   }
 }

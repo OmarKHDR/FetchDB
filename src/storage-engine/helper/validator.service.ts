@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import { StringManipulationService } from 'src/shared/string-manipulation.service';
 import { Column, Type } from 'src/storage-engine/types/column.type';
 
 @Injectable()
 export class ValidatorService {
+  constructor(private stringManip: StringManipulationService) {}
   validateType(t: Type, value: string) {
     try {
       switch (t) {
@@ -16,7 +18,7 @@ export class ValidatorService {
           BigInt(value);
           return;
         case 'timestamp':
-          value = this.removeQoutesIfExists(value);
+          value = this.stringManip.removeQoutesIfExists(value);
           if (new Date(value).getTime() > 0) return;
           else throw new Error('');
         case 'varchar':
@@ -24,18 +26,6 @@ export class ValidatorService {
       }
     } catch (err) {
       throw new Error(`Type Violation: ${value} should have been of type ${t}`);
-    }
-  }
-
-  isString(val: string) {
-    return val.startsWith('"') || val.startsWith("'");
-  }
-
-  removeQoutesIfExists(val: string) {
-    if (this.isString(val)) {
-      return val.slice(1, -1);
-    } else {
-      return val;
     }
   }
 

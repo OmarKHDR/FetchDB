@@ -9,6 +9,7 @@ import { ParserModule } from 'src/parser/parser.module';
 import { StorageStrategyService } from './storage-strategy/storage-strategy.service';
 import { ValidatorService } from './helper/validator.service';
 import { ObjectHandlerService } from './helper/object-handler.service';
+import { SharedModule } from 'src/shared/shared.module';
 
 @Module({
   imports: [WinstonLoggerModule, ParserModule],
@@ -21,7 +22,7 @@ import { ObjectHandlerService } from './helper/object-handler.service';
     StorageStrategyService,
     ValidatorService,
     ObjectHandlerService,
-
+    SharedModule,
   ],
   exports: [StorageEngineService, FileHandlerService],
 })

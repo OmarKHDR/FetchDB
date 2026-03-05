@@ -31,7 +31,7 @@ export class ParserService {
         return this.ddlParser.handleCreateStatement(state);
       default:
         throw new Error(
-          `this statment wasn't implemeneted yet ${statementType}`,
+          `Not Implemented Error: this statment wasn't implemeneted yet ${statementType}`,
         );
     }
   }
