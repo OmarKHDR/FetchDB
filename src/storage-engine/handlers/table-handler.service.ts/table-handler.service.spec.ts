@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { StorageStrategyService } from './storage-strategy.service';
+import { StorageStrategyService } from './table-handler.service';
 
 describe('StorageStrategyService', () => {
   let service: StorageStrategyService;

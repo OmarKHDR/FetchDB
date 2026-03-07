@@ -10,14 +10,12 @@ import {
   ASTUpdate,
 } from 'src/parser/types/trees';
 import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
-import { FileHandlerService } from 'src/storage-engine/file-handler/file-handler.service';
 @Injectable()
 export class SqlInterpreterService {
   constructor(
     private lexer: LexerService,
     private parser: ParserService,
     private storageEngine: StorageEngineService,
-    private fileHandler: FileHandlerService,
     private winston: WinstonLoggerService,
   ) {}
 
@@ -27,7 +25,7 @@ export class SqlInterpreterService {
     this.winston.query(
       tokens.join(' '),
       'DML',
-      this.fileHandler.getSchemaVersion(),
+      await this.storageEngine.getSchemaVersion(),
       'DML Interpreter',
     );
     switch (ASTobj.statement) {
@@ -56,7 +54,9 @@ export class SqlInterpreterService {
           'Interpreter Error: This is a DDL statement call the /execute/ddl endpoint',
         );
       default:
-        throw new Error(`Not Implemented Error: This statement not implemented yet ${ASTobj.statement}`);
+        throw new Error(
+          `Not Implemented Error: This statement not implemented yet ${ASTobj.statement}`,
+        );
     }
   }
 
@@ -66,7 +66,7 @@ export class SqlInterpreterService {
     this.winston.query(
       tokens.join(' '),
       'DDL',
-      this.fileHandler.getSchemaVersion(),
+      await this.storageEngine.getSchemaVersion(),
       'DDL Interpreter',
     );
     switch (ASTobj.statement) {

@@ -9,10 +9,10 @@ export class ValidatorService {
     try {
       switch (t) {
         case 'float':
-          parseFloat(value);
+          if (isNaN(parseFloat(value))) throw new Error;
           return;
         case 'int':
-          parseInt(value);
+          if (isNaN(parseInt(value))) throw new Error;
           return;
         case 'serial':
           BigInt(value);

@@ -1,29 +1,23 @@
 import { Module } from '@nestjs/common';
 import { StorageEngineService } from './storage-engine.service';
-import { DbHandlerService } from './db-handler/db-handler.service';
-import { FileHandlerService } from './file-handler/file-handler.service';
 import { BufferManagerService } from './buffer-manager/buffer-manager.service';
 import { WinstonLoggerModule } from '../winston-logger/winston-logger.module';
 import { MutexService } from './mutex/mutex.service';
 import { ParserModule } from 'src/parser/parser.module';
-import { StorageStrategyService } from './storage-strategy/storage-strategy.service';
 import { ValidatorService } from './helper/validator.service';
-import { ObjectHandlerService } from './helper/object-handler.service';
+import { ObjectFilterService } from './helper/object-filter.service';
 import { SharedModule } from 'src/shared/shared.module';
+import { HandlersModule } from './handlers/handlers.module';
 
 @Module({
-  imports: [WinstonLoggerModule, ParserModule],
+  imports: [WinstonLoggerModule, ParserModule, HandlersModule, SharedModule],
   providers: [
     StorageEngineService,
-    DbHandlerService,
-    FileHandlerService,
     BufferManagerService,
     MutexService,
-    StorageStrategyService,
     ValidatorService,
-    ObjectHandlerService,
-    SharedModule,
+    ObjectFilterService,
   ],
-  exports: [StorageEngineService, FileHandlerService],
+  exports: [StorageEngineService],
 })
 export class StorageEngineModule {}

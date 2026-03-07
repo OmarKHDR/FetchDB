@@ -3,7 +3,7 @@ import { StatementParser } from './statement-parser.service';
 import { MathService } from '../math/math.service';
 import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
 import { ASTDelete, ASTInsert, ASTSelect, ASTUpdate } from '../types/trees';
-import { tokensParser } from '../types/token-parser.type';
+import { TokensParser } from '../types/token-parser.type';
 import { reserved_keywords } from 'src/shared/constants/keywords.constants';
 
 @Injectable()
@@ -15,7 +15,7 @@ export class DMLParser extends StatementParser {
     super(math, winston);
   }
 
-  handleSelectStatement(state: tokensParser): ASTSelect {
+  handleSelectStatement(state: TokensParser): ASTSelect {
     const result: ASTSelect = {
       statement: 'select',
       columns: '*',
@@ -56,7 +56,7 @@ export class DMLParser extends StatementParser {
   }
 
   //delete
-  handleDeleteStatement(state: tokensParser) {
+  handleDeleteStatement(state: TokensParser) {
     const result: ASTDelete = {
       statement: this.eat(state),
       tablename: '',
@@ -80,7 +80,7 @@ export class DMLParser extends StatementParser {
   }
 
   //update tablename set column=value, column=value where something
-  handleUpdateStatement(state: tokensParser) {
+  handleUpdateStatement(state: TokensParser) {
     const result: ASTUpdate = {
       statement: this.eat(state),
       tablename: '',
@@ -126,7 +126,7 @@ export class DMLParser extends StatementParser {
     return result;
   }
 
-  handleInsertStatement(state: tokensParser) {
+  handleInsertStatement(state: TokensParser) {
     const result: ASTInsert = {
       statement: 'insert',
       tablename: '',
@@ -179,7 +179,7 @@ export class DMLParser extends StatementParser {
       throw new Error('Syntax Error: columns and values must match in size');
     result.columnsNames = columnsNames;
     result.columnsValues = columnsValues;
-    this.winston.info(`parsed insert statement: ${result}`)
+    this.winston.info(`parsed insert statement`)
     return result;
   }
 }

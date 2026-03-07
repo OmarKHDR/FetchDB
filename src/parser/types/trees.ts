@@ -1,5 +1,5 @@
 import { Column } from 'src/storage-engine/types/column.type';
-import { ExprRes } from '../math/math.service';
+import { ExprRes } from './math.types';
 
 export type ASTSelect = {
   statement: string;

@@ -23,7 +23,7 @@ export class AppController {
     examples: {
       insert: {
         value:
-          'INSERT INTO employees (name, created_at) VALUES ("omar", "2025-11-23T10:00:00Z")',
+          'INSERT INTO employees (name, created_at) VALUES ("omar", "2025-11-23T10:00:00Z");',
       },
       select: {
         value: 'SELECT * FROM employees;',
@@ -36,6 +36,7 @@ export class AppController {
       },
     },
   })
+  //posting a DML
   @Post('/execute/dml')
   async executeDML(@Body() body: string) {
     this.winston.info(
@@ -67,6 +68,7 @@ export class AppController {
     },
   })
   @ApiConsumes('text/plain')
+  //posting a DDL
   @Post('/execute/ddl')
   async executeDDL(@Body() body: string) {
     this.winston.info(
@@ -85,7 +87,7 @@ export class AppController {
   }
 
   @ApiOperation({ description: 'get an array of schema history' })
-  @Get('/history')
+  @Get('/schema/history')
   async getSchemaHistory() {
     this.winston.info(`hit /history endpoint`, 'executeDDL');
     try {
@@ -103,10 +105,10 @@ export class AppController {
   }
 
   @ApiOperation({
-    description: 'set a new schema version from the array got from /history ',
+    description: 'set a the schema version from the array got from /history ',
   })
   @ApiBody({ type: setVersionDto })
-  @Post('/version')
+  @Post('schema/version')
   async setSchemaVersion(@Body() body: { version: number }) {
     this.winston.info(
       `hit /version endpoint with version: ${body.version}`,
@@ -124,6 +126,12 @@ export class AppController {
         message: err.message,
       };
     }
+  }
+
+  @ApiOperation({ description: 'get current schema version' })
+  @Get('/schema/version')
+  async getSchemaVersion() {
+    return await this.storage.getSchemaVersion();
   }
 
   @ApiOperation({

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { FileHandlerService } from './file-handler/file-handler.service';
+import { FileHandlerService } from './handlers/file-handler/file-handler.service';
 import {
   ASTCreate,
   ASTDelete,
@@ -7,10 +7,20 @@ import {
   ASTSelect,
   ASTUpdate,
 } from 'src/parser/types/trees';
+import { WriteHandlerService } from './handlers/write-handler/write-handler.service';
+import { ReadHandlerService } from './handlers/read-handler/read-handler.service';
+import { UpdateHandlerService } from './handlers/update-handler/update-handler.service';
+import { DeleteHandlerService } from './handlers/delete-handler/delete-handler.service';
 
 @Injectable()
 export class StorageEngineService {
-  constructor(private filehander: FileHandlerService) {}
+  constructor(
+    private filehander: FileHandlerService,
+    private writeService: WriteHandlerService,
+    private readService: ReadHandlerService,
+    private updateService: UpdateHandlerService,
+    private deleteService: DeleteHandlerService,
+  ) {}
 
   async createTable(ASTtree: ASTCreate) {
     return await this.filehander.createNewTable(
@@ -20,7 +30,7 @@ export class StorageEngineService {
   }
 
   async insertIntoTable(ASTtree: ASTInsert) {
-    return await this.filehander.writeToTable(
+    return await this.writeService.writeToTable(
       ASTtree.tablename,
       ASTtree.columnsValues,
       ASTtree.columnsNames,
@@ -38,10 +48,10 @@ export class StorageEngineService {
     ) {
       options = {
         op: ASTtree.where.operator,
-        id: (Number(ASTtree.where.rhs) || Number(ASTtree.where.lhs)) || 0,
+        id: Number(ASTtree.where.rhs) || Number(ASTtree.where.lhs) || 0,
       };
     }
-    return await this.filehander.getMatchedRows(
+    return await this.readService.getMatchedRows(
       ASTtree.tablename,
       ASTtree.columns,
       ASTtree.where,
@@ -50,7 +60,7 @@ export class StorageEngineService {
   }
 
   async updateTable(ASTtree: ASTUpdate) {
-    return await this.filehander.updateRows(
+    return await this.updateService.updateRows(
       ASTtree.tablename,
       ASTtree.where,
       ASTtree.column,
@@ -59,7 +69,7 @@ export class StorageEngineService {
   }
 
   async deleteRows(ASTtree: ASTDelete) {
-    return await this.filehander.deleteRow(ASTtree.tablename, ASTtree.where);
+    return await this.deleteService.deleteRow(ASTtree.tablename, ASTtree.where);
   }
 
   async getSchemaHistory() {
@@ -70,7 +80,11 @@ export class StorageEngineService {
     await this.filehander.setSchemaVersion(v);
   }
 
+  async getSchemaVersion() {
+    return await this.filehander.getSchemaVersion();
+  }
+ 
   async getRowHistory(tablename: string, id: number) {
-    return await this.filehander.getRowHistory(tablename, id);
+    return await this.readService.getRowHistory(tablename, id);
   }
 }

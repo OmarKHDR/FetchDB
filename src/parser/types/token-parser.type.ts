@@ -1,4 +1,4 @@
-export interface tokensParser {
+export interface TokensParser {
   tokens: string[];
   cursor: number;
 }

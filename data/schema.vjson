@@ -1,0 +1,1 @@
+{"employees":[{"name":"id","type":"serial","IsNullable":false,"IsUnique":true,"IsPK":true,"serial":0},{"name":"name","type":"varchar","varcharLimit":15,"IsNullable":true,"IsUnique":false,"default":"\"username\""},{"name":"created_at","type":"timestamp","IsNullable":true,"IsUnique":false}]}

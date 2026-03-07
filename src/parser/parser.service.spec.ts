@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ParserService } from './statements/parser.service';
 import { WinstonLoggerModule } from '../winston-logger/winston-logger.module';
 import { SharedModule } from '../shared/shared.module';
+import { ParserService } from './parser.service';
 
 describe('ParserService', () => {
   let service: ParserService;

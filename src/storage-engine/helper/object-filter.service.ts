@@ -1,17 +1,16 @@
 import { Injectable } from '@nestjs/common';
 
 @Injectable()
-export class ObjectHandlerService {
+export class ObjectFilterService {
   filterObject(
     tablename: string,
     rowObj: Record<string, string>,
     columns: Array<string> | '*',
   ) {
-    let filteredRowObj = {};
+    let filteredRowObj = {...rowObj};
     if (typeof columns === 'string' && columns === '*') {
-      delete rowObj['prevVersion'];
-      delete rowObj['prevVersionSize'];
-      filteredRowObj = rowObj;
+      delete filteredRowObj['prevVersion'];
+      delete filteredRowObj['prevVersionSize'];
     } else {
       for (const column of columns) {
         if (rowObj[column] === undefined)

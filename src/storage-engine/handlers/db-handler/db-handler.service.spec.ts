@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DbHandlerService } from './db-handler.service';
-import { WinstonLoggerModule } from '../../winston-logger/winston-logger.module';
+import { WinstonLoggerModule } from '../../../winston-logger/winston-logger.module';
 
 describe('DbHandlerService', () => {
   let service: DbHandlerService;

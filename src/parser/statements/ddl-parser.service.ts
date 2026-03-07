@@ -3,7 +3,7 @@ import { StatementParser } from './statement-parser.service';
 import { MathService } from '../math/math.service';
 import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
 import { Column, Type } from 'src/storage-engine/types/column.type';
-import { tokensParser } from '../types/token-parser.type';
+import { TokensParser } from '../types/token-parser.type';
 import { ASTCreate } from '../types/trees';
 import { reserved_keywords } from 'src/shared/constants/keywords.constants';
 
@@ -15,7 +15,7 @@ export class DDLParser extends StatementParser {
   ) {
     super(math, winston);
   }
-  handleCreateStatement(state: tokensParser) {
+  handleCreateStatement(state: TokensParser) {
     const result: ASTCreate = {
       statement: 'create',
       tablename: '',
@@ -30,7 +30,7 @@ export class DDLParser extends StatementParser {
     return result;
   }
 
-  handleColumnDefinition(state: tokensParser): Column[] {
+  handleColumnDefinition(state: TokensParser): Column[] {
     const columns: Column[] = [];
     if (this.eat(state) !== '(')
       throw new Error(`Syntax Error: table definition must exist`);

@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { FileHandlerService } from './file-handler.service';
-import { WinstonLoggerModule } from '../../winston-logger/winston-logger.module';
+import { WinstonLoggerModule } from '../../../winston-logger/winston-logger.module';
 import { DbHandlerService } from '../db-handler/db-handler.service';
 
 describe('FileHandlerService', () => {

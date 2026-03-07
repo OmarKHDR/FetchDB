@@ -1,20 +1,30 @@
 import { Injectable } from '@nestjs/common';
 import fs from 'fs/promises';
-import { BufferManagerService } from '../buffer-manager/buffer-manager.service';
+import { BufferManagerService } from '../../buffer-manager/buffer-manager.service';
 import path from 'path';
 import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
+import {
+  SchemaHandle,
+  TableHandle,
+} from 'src/storage-engine/types/handlers.types';
+import { MutexService } from 'src/storage-engine/mutex/mutex.service';
 
-// a service used to handle side buffer + file handler compined logic, so the file handler don't need to do any file writes or reads
-// only uses this service internals
 @Injectable()
-export class StorageStrategyService {
+export class TableHandlerService {
   constructor(
-    private bufferHandler: BufferManagerService,
+    private bufferManager: BufferManagerService,
     private winston: WinstonLoggerService,
+    private mutex: MutexService,
   ) {}
 
   async getTableSize(fd: fs.FileHandle) {
     return (await fd.stat()).size;
+  }
+
+  async getRowsCount(table: TableHandle) {
+    const size = (await table.index.stat()).size;
+    table.rowCount = Math.max(Math.trunc(size / 12), table.rowCount || 0);
+    return table.rowCount;
   }
 
   async createSchemaFiles(rootDir: string) {
@@ -59,7 +69,6 @@ export class StorageStrategyService {
     };
   }
 
-
   async readRowsFromIndexBuffer(
     indexBufferObj: { buffer: Buffer; bytesRead: number },
     tableFileHandle: fs.FileHandle,
@@ -70,7 +79,7 @@ export class StorageStrategyService {
     const indexes: Array<{ index: bigint; rowLength: number }> = [];
     for (let i = 0; i < end; i++) {
       indexes.push(
-        this.bufferHandler.indexReader({
+        this.bufferManager.indexReader({
           buffer: indexBufferObj.buffer.subarray(
             i * indexRowSize,
             (i + 1) * indexRowSize,
@@ -87,5 +96,22 @@ export class StorageStrategyService {
       tableBufferArray.push(fileBuf.buffer.subarray(0, fileBuf.bytesRead));
     }
     return tableBufferArray;
+  }
+
+  async saveToTable(data: Buffer, files: TableHandle | SchemaHandle) {
+    const fd = (files as TableHandle).table ?? (files as SchemaHandle).schema;
+    const b = this.bufferManager.getAllocatedBuffer(0, 12);
+    b.writeInt32LE(data.length, 8);
+    const resolver = await this.mutex.acquireMutex('schemahandler');
+    try {
+      const dataOffset = await this.getTableSize(fd);
+      b.writeBigInt64LE(BigInt(dataOffset));
+      await fd.appendFile(data);
+      await files.index.appendFile(b);
+    } catch (err) {
+      this.winston.error(`${err}`, 'FileHandler');
+    } finally {
+      resolver('finaly');
+    }
   }
 }

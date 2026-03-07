@@ -1,16 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { reserved_keywords } from '../../shared/constants/keywords.constants';
 import { WinstonLoggerService } from '../../winston-logger/winston-logger.service';
-import { StringManipulationService } from 'src/shared/string-manipulation.service';
-type Expression = {
-  tokens: Array<string>;
-  cursor: number;
-};
-export type ExprRes = {
-  lhs: ExprRes | string;
-  operator: string;
-  rhs: ExprRes | string;
-};
+import { StringManipulationService } from '../../shared/string-manipulation.service';
+import { TokensParser } from '../types/token-parser.type';
+import { ExprRes } from '../types/math.types';
+
 // type TokenType = 'OP' | 'Pranthesis' | 'Value';
 @Injectable()
 export class MathService {
@@ -37,19 +31,19 @@ export class MathService {
     };
   }
 
-  peek(state: Expression) {
+  peek(state: TokensParser) {
     return state.tokens[state.cursor];
   }
 
-  eat(state: Expression) {
+  eat(state: TokensParser) {
     return state.tokens[state.cursor++];
   }
 
   parseExpression(
-    state: Expression,
+    state: TokensParser,
     maxPriority: number = -1,
   ): ExprRes | string {
-    const lhs = this.__handleLHS(state);
+    let lhs = this.__handleLHS(state);
     while (
       state.cursor < state.tokens.length &&
       this.peek(state) !== ';' &&
@@ -60,7 +54,7 @@ export class MathService {
         throw new Error(`Syntax Error: operator ${op} is not known`);
       if (this.operators[op] <= maxPriority) break;
       this.eat(state);
-      return {
+      lhs = {
         lhs: lhs,
         operator: op,
         rhs: this.parseExpression(state, this.operators[op]),
@@ -69,7 +63,7 @@ export class MathService {
     return lhs;
   }
 
-  __handleLHS(state: Expression) {
+  __handleLHS(state: TokensParser) {
     const lhs = this.peek(state);
     if (lhs === '(') return this.__handlePranthesis(state);
     // then the lhs either a number, a string, a column, NOT
@@ -87,7 +81,7 @@ export class MathService {
     return lhs;
   }
 
-  __handlePranthesis(state: Expression): ExprRes | string {
+  __handlePranthesis(state: TokensParser): ExprRes | string {
     this.eat(state); //remove the pranthesis
     let pranthCount = 1;
     const tokens: Array<string> = [];

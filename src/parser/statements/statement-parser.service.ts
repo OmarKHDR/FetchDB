@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { reserved_keywords } from '../../shared/constants/keywords.constants';
 import { MathService } from '../math/math.service';
-import type { ExprRes } from '../math/math.service';
 import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
-import { tokensParser } from '../types/token-parser.type';
+import { TokensParser } from '../types/token-parser.type';
+import { ExprRes } from '../types/math.types';
 
 @Injectable()
 export class StatementParser {
@@ -15,15 +15,15 @@ export class StatementParser {
     this.singleCharacters = [',', '(', ')', ';'];
   }
 
-  protected peek(state: tokensParser) {
+  protected peek(state: TokensParser) {
     return state.tokens[state.cursor];
   }
 
-  protected eat(state: tokensParser) {
+  protected eat(state: TokensParser) {
     return state.tokens[state.cursor++];
   }
 
-  protected handleFromClause(state: tokensParser) {
+  protected handleFromClause(state: TokensParser) {
     this.eat(state);
     const tables: Array<string> = [];
     for (; state.cursor < state.tokens.length; ) {
@@ -40,7 +40,7 @@ export class StatementParser {
     return tables[0];
   }
 
-  protected handleWhereClause(state: tokensParser): ExprRes | string {
+  protected handleWhereClause(state: TokensParser): ExprRes | string {
     this.eat(state);
     return this.math.parseExpression(state);
   }
