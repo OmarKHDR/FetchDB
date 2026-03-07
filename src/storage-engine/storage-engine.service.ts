@@ -11,7 +11,8 @@ import { WriteHandlerService } from './handlers/write-handler/write-handler.serv
 import { ReadHandlerService } from './handlers/read-handler/read-handler.service';
 import { UpdateHandlerService } from './handlers/update-handler/update-handler.service';
 import { DeleteHandlerService } from './handlers/delete-handler/delete-handler.service';
-
+import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
+import { promisify } from 'util';
 @Injectable()
 export class StorageEngineService {
   constructor(
@@ -20,6 +21,7 @@ export class StorageEngineService {
     private readService: ReadHandlerService,
     private updateService: UpdateHandlerService,
     private deleteService: DeleteHandlerService,
+    private winston: WinstonLoggerService,
   ) {}
 
   async createTable(ASTtree: ASTCreate) {
@@ -83,8 +85,23 @@ export class StorageEngineService {
   async getSchemaVersion() {
     return await this.filehander.getSchemaVersion();
   }
- 
+
   async getRowHistory(tablename: string, id: number) {
     return await this.readService.getRowHistory(tablename, id);
+  }
+
+  async getQueryHistory() {
+    const fields = [
+      'statementType',
+      'schemaVersion',
+      'context',
+      'timestamp',
+      'level',
+      'message',
+    ];
+    const querylogs = promisify(this.winston.logger.query).bind(
+      this.winston.logger,
+    );
+    return await querylogs({ fields });
   }
 }

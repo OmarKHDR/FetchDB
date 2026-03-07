@@ -53,7 +53,7 @@ export class DeleteHandlerService {
           BigInt(dataOffset),
         );
       } catch (err) {
-        this.winston.error(err, 'FileHandler');
+        this.winston.error(err.message, 'FileHandler');
       } finally {
         resolver('final');
       }

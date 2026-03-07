@@ -1,15 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { StorageStrategyService } from './table-handler.service';
+import { TableHandlerService } from './table-handler.service';
 
-describe('StorageStrategyService', () => {
-  let service: StorageStrategyService;
+describe('TableHandlerService', () => {
+  let service: TableHandlerService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [StorageStrategyService],
+      providers: [TableHandlerService],
     }).compile();
 
-    service = module.get<StorageStrategyService>(StorageStrategyService);
+    service = module.get<TableHandlerService>(TableHandlerService);
   });
 
   it('should be defined', () => {

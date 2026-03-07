@@ -44,7 +44,7 @@ export class TableHandlerService {
       const filehandler = await fs.open(filepath, mode);
       return filehandler;
     } catch (err) {
-      this.winston.error(`${err}`, 'FileHandler');
+      this.winston.error(`${err}`, 'TableHandler');
       throw err;
     }
   }
@@ -69,18 +69,22 @@ export class TableHandlerService {
     };
   }
 
-  async readRowsFromIndexBuffer(
-    indexBufferObj: { buffer: Buffer; bytesRead: number },
-    tableFileHandle: fs.FileHandle,
+  async readRowsBuffer(
+    file: TableHandle | SchemaHandle,
+    start: number,
     end: number,
-    indexRowSize: number,
+    indexRowSize: number = 12,
   ) {
+    const indexBufferArray = await file.index.read({
+      position: start * indexRowSize,
+      length: (end - start) * indexRowSize,
+    });
     const tableBufferArray: Array<Buffer> = [];
     const indexes: Array<{ index: bigint; rowLength: number }> = [];
-    for (let i = 0; i < end; i++) {
+    for (let i = start; i < end; i++) {
       indexes.push(
         this.bufferManager.indexReader({
-          buffer: indexBufferObj.buffer.subarray(
+          buffer: indexBufferArray.buffer.subarray(
             i * indexRowSize,
             (i + 1) * indexRowSize,
           ),
@@ -88,8 +92,11 @@ export class TableHandlerService {
         }),
       );
     }
+    indexes.sort((a, b) => Number(a.index - b.index));
+    const fileHandle =
+      (file as TableHandle).table ?? (file as SchemaHandle).schema;
     for (const index of indexes) {
-      const fileBuf = await tableFileHandle.read({
+      const fileBuf = await fileHandle.read({
         position: index.index,
         length: index.rowLength,
       });
@@ -109,7 +116,7 @@ export class TableHandlerService {
       await fd.appendFile(data);
       await files.index.appendFile(b);
     } catch (err) {
-      this.winston.error(`${err}`, 'FileHandler');
+      this.winston.error(`${err.stack}`, 'TableHandler');
     } finally {
       resolver('finaly');
     }

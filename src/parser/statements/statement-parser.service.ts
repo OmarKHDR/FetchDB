@@ -4,6 +4,7 @@ import { MathService } from '../math/math.service';
 import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
 import { TokensParser } from '../types/token-parser.type';
 import { ExprRes } from '../types/math.types';
+import { NameValidationService } from 'src/shared/name-validation.service';
 
 @Injectable()
 export class StatementParser {
@@ -11,6 +12,7 @@ export class StatementParser {
   constructor(
     protected math: MathService,
     protected winston: WinstonLoggerService,
+    protected nameValidator: NameValidationService,
   ) {
     this.singleCharacters = [',', '(', ')', ';'];
   }
@@ -26,15 +28,18 @@ export class StatementParser {
   protected handleFromClause(state: TokensParser) {
     this.eat(state);
     const tables: Array<string> = [];
-    for (; state.cursor < state.tokens.length; ) {
+    while (state.cursor < state.tokens.length) {
       const token = this.peek(state);
       if (reserved_keywords.includes(token)) break;
       this.eat(state);
       if (token === ';') break;
       if (token === ',') continue;
-      else tables.push(token);
+      else {
+        this.nameValidator.validateName(token, 'Table Name')
+        tables.push(token);
+      }
     }
-    if (tables.length === 0) throw new Error('Syntax Error: Missing FROM');
+    if (tables.length === 0) throw new Error('Syntax Error: Missing table name');
     if (tables.length > 1)
       throw new Error('Not Implemented Error: Cross Joins not implemented yet');
     return tables[0];

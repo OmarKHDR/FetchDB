@@ -6,14 +6,16 @@ import { Column, Type } from 'src/storage-engine/types/column.type';
 import { TokensParser } from '../types/token-parser.type';
 import { ASTCreate } from '../types/trees';
 import { reserved_keywords } from 'src/shared/constants/keywords.constants';
+import { NameValidationService } from 'src/shared/name-validation.service';
 
 @Injectable()
 export class DDLParser extends StatementParser {
   constructor(
     protected math: MathService,
     protected winston: WinstonLoggerService,
+    protected nameValidator: NameValidationService,
   ) {
-    super(math, winston);
+    super(math, winston, nameValidator);
   }
   handleCreateStatement(state: TokensParser) {
     const result: ASTCreate = {
@@ -21,12 +23,13 @@ export class DDLParser extends StatementParser {
       tablename: '',
       columns: [],
     };
-    this.winston.info(`handling the create statement`)
+    this.winston.info(`handling the create statement`, 'DDLParser');
     this.eat(state);
     if (this.eat(state) !== 'table') throw new Error('not implemented');
     result['tablename'] = this.eat(state);
+    this.nameValidator.validateName(result['tablename'], 'Table Name');
     result['columns'] = this.handleColumnDefinition(state);
-    this.winston.info(`parsed create statement: ${result}`)
+    this.winston.info(`parsed create statement: ${result}`, 'DDLParser');
     return result;
   }
 
@@ -46,13 +49,16 @@ export class DDLParser extends StatementParser {
         continue;
       }
       if (reserved_keywords.includes(token)) {
-        throw new Error(`Syntax Error: unexpected keyword ${token.toUpperCase()}`)
+        throw new Error(
+          `Syntax Error: unexpected keyword ${token.toUpperCase()}`,
+        );
       }
       // (name type primary key not null)
       const column: Column = {
         name: this.eat(state),
         type: this.eat(state) as Type,
       };
+      this.nameValidator.validateName(column.name, 'Column Name')
       if (column.type === 'varchar') {
         if (this.eat(state) === '(') {
           const limit = this.eat(state);

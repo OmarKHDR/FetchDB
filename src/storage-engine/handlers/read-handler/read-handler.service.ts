@@ -176,39 +176,34 @@ export class ReadHandlerService {
       startPos = 0;
       endPos = indexCount;
     }
-    let indexes = await this.readIndexList(tablename, startPos, endPos);
-    indexes = indexes.sort((a, b) => {
-      return Number(a.index - b.index);
-    });
-    console.log(indexes, startPos, endPos);
+    const rowsBuffer = await this.tableHandler.readRowsBuffer(
+      this.fileHandler.tables[tablename],
+      startPos,
+      endPos,
+    );
     const resRows: Array<object> = [];
-    for (const index of indexes) {
-      const row = await this.fileHandler.tables[tablename].table.read({
-        position: index.index,
-        length: index.rowLength,
-      });
+    rowsBuffer.forEach((row) => {
       const rowObj = this.bufferManager.tableBufferToObject(
-        row,
+        { buffer: row, bytesRead: row.length },
         this.fileHandler.schemaObj[tablename],
       );
       if (rowObj['deleted']) {
-        continue;
+        return;
       }
-      this.winston.info(`Column to check:`);
-      console.log(rowObj);
+
       const filteredRowObj = this.objectFilter.filterObject(
         tablename,
         rowObj,
         columns,
       );
-      this.winston.info(`filtered column:`);
-      console.log(filteredRowObj);
+
       if (!where) {
         resRows.push(filteredRowObj);
       } else if (this.math.compare(where, rowObj)) {
         resRows.push(filteredRowObj);
       }
-    }
+    });
+
     return resRows;
   }
 

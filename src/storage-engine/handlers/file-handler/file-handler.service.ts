@@ -23,7 +23,9 @@ export class FileHandlerService {
     this.schema = await this.tableHandler.createSchemaFiles(
       this.dbHandler.rootDir,
     );
-    const schemaVersion = await this.schemaHandler.getLatestVersion(this.schema);
+    const schemaVersion = await this.schemaHandler.getLatestVersion(
+      this.schema,
+    );
     this.winston.info(
       `current schema version: ${schemaVersion}`,
       'FileHandler',
@@ -40,7 +42,7 @@ export class FileHandlerService {
             (await this.tables[table].index.stat()).size / 12,
           );
           this.winston.info(
-            `setting the column ${column.name} start to ${column.serial}`,
+            `setting the column ${column.name} start to ${column.serial}`, 'FileHandler'
           );
         }
       }
@@ -80,13 +82,14 @@ export class FileHandlerService {
       this.schema,
       version,
     );
-    this.winston.info(`Setting schema version into ${version}, the schema:`);
-    console.log(this.schemaObj);
+    this.winston.info(`Setting schema version into ${version}`, 'FileHandler');
   }
 
   async createNewTable(tablename: string, tableSchema: Column[]) {
     const newTableObj: Record<string, Column[]> = {};
     newTableObj[tablename] = tableSchema;
+    if (tablename in this.tables || this.schemaObj[tablename])
+      throw new Error(`Couldn't create table: Table Already Exists`);
     try {
       this.tables[tablename] = await this.tableHandler.openTable(
         this.dbHandler.rootDir,
@@ -97,16 +100,12 @@ export class FileHandlerService {
         this.schema,
         this.tables,
       );
-      console.log(this.schemaObj)
-
-
     } catch (err) {
       await this.tables[tablename].table.close();
       await this.tables[tablename].index.close();
       delete this.tables[tablename];
-      throw new Error(`couldn't create table file: ${err}`);
+      throw new Error(`Couldn't create table: ${err.message}`);
     }
     return newTableObj;
   }
-
 }

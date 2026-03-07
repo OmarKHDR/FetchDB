@@ -17,13 +17,11 @@ export class SchemaHandlerService {
 
   async getAllSchema(schema: SchemaHandle) {
     const end = await this.getLatestVersion(schema);
-    const bufObj = await schema.index.read({
-      position: 0 * 12,
-      length: end * 12,
-    });
-    const schemaArray = await this.tableHandler.readRowsFromIndexBuffer(
-      bufObj,
-      schema.schema,
+    const start = 0;
+
+    const schemaArray = await this.tableHandler.readRowsBuffer(
+      schema,
+      start,
       end,
       12,
     );
@@ -46,20 +44,20 @@ export class SchemaHandlerService {
   ) {
     const oldSchema = await this.readSchema(schema);
     for (const table in newTables) {
-      if (table in oldSchema) throw new Error('Error: table already exists');
+      if (table in oldSchema) throw new Error('table already exists');
       oldSchema[table] = newTables[table];
       for (const column of oldSchema[table]) {
         if (column.type === 'serial') {
           column.serial = await this.tableHandler.getRowsCount(tables[table]);
           this.winston.info(
-            `setting the column ${column.name} start to ${column.serial}`,
+            `setting the column ${column.name} start to ${column.serial}`, 'SchemaHandler'
           );
         }
       }
     }
     const data = JSON.stringify(oldSchema);
     await this.tableHandler.saveToTable(Buffer.from(data), schema);
-    this.winston.info(`new schema version is created: ${data}`);
+    this.winston.info(`new schema version is created: ${data}`, 'SchemaHandler');
     await this.updateVersion(schema);
     return oldSchema;
   }

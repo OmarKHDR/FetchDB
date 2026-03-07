@@ -41,16 +41,17 @@ export class AppController {
   async executeDML(@Body() body: string) {
     this.winston.info(
       `hit /execute/dml endpoint with Query: ${body}`,
-      'executeDML',
+      'AppController',
     );
-    this.winston.info(`recieved query: ${body}`, 'executeDML');
+    this.winston.info(`recieved query: ${body}`, 'AppController');
     try {
       return {
         success: true,
         ...(await this.interpreter.interpretDML(body)),
       };
     } catch (err) {
-      this.winston.error(err, 'executeDML');
+      this.winston.error(err.stack, 'AppController');
+
       return { success: false, message: err.message };
     }
   }
@@ -73,7 +74,7 @@ export class AppController {
   async executeDDL(@Body() body: string) {
     this.winston.info(
       `hit /execute/ddl endpoint with Query: ${body}`,
-      'executeDDL',
+      'AppController',
     );
     try {
       return {
@@ -81,7 +82,7 @@ export class AppController {
         ...(await this.interpreter.interpretDDL(body)),
       };
     } catch (err) {
-      this.winston.error(err, 'executeDDL');
+      this.winston.error(err.stack, 'AppController');
       return { success: false, message: err.message };
     }
   }
@@ -89,14 +90,14 @@ export class AppController {
   @ApiOperation({ description: 'get an array of schema history' })
   @Get('/schema/history')
   async getSchemaHistory() {
-    this.winston.info(`hit /history endpoint`, 'executeDDL');
+    this.winston.info(`hit /history endpoint`, 'AppController');
     try {
       return {
         success: true,
         data: await this.storage.getSchemaHistory(),
       };
     } catch (err) {
-      this.winston.error(err, 'executeDDL');
+      this.winston.error(err.stack, 'AppController');
       return {
         success: false,
         message: err.message,
@@ -112,7 +113,7 @@ export class AppController {
   async setSchemaVersion(@Body() body: { version: number }) {
     this.winston.info(
       `hit /version endpoint with version: ${body.version}`,
-      'setSchemaVersion',
+      'AppController',
     );
     try {
       return {
@@ -120,7 +121,7 @@ export class AppController {
         data: await this.storage.setSchemaVersion(body.version),
       };
     } catch (err) {
-      this.winston.error(err, 'setSchemaVersion');
+      this.winston.error(err.stack, 'AppController');
       return {
         success: false,
         message: err.message,
@@ -142,7 +143,7 @@ export class AppController {
   async getDataHistory(@Body() body: selectRowDto) {
     this.winston.info(
       `hit /data/history endpoint with Query: table=${body.tablename} and id=${body.id}`,
-      'getDataHistory',
+      'AppController',
     );
     try {
       return {
@@ -150,11 +151,16 @@ export class AppController {
         data: await this.storage.getRowHistory(body.tablename, body.id),
       };
     } catch (err) {
-      this.winston.error(err, 'AppController');
+      this.winston.error(err.stack, 'AppController');
       return {
         success: false,
         message: err.message,
       };
     }
+  }
+
+  @Get('/query/history')
+  getQueryHistory() {
+    return this.storage.getQueryHistory();
   }
 }

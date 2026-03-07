@@ -19,8 +19,19 @@ describe('LexerService', () => {
   });
 
   it('tokenization tests: all strings', () => {
-    expect(service.tokinize('SELECT username FROM users Where id>=id')).toEqual(
-      ['select', 'username', 'from', 'users', 'where', 'id', '>=', 'id'],
+    const obj = service.tokinize(
+      `SELECT username FROM users "Omar Khaled" 'omar khaled' Where id>=id`,
     );
+    console.log(obj);
+    expect(obj).toEqual([
+      'select',
+      'username',
+      'from',
+      'users',
+      'where',
+      'id',
+      '>=',
+      'id',
+    ]);
   });
 });

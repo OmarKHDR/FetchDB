@@ -5,16 +5,19 @@ import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service'
 import { ASTDelete, ASTInsert, ASTSelect, ASTUpdate } from '../types/trees';
 import { TokensParser } from '../types/token-parser.type';
 import { reserved_keywords } from 'src/shared/constants/keywords.constants';
+import { NameValidationService } from 'src/shared/name-validation.service';
 
 @Injectable()
 export class DMLParser extends StatementParser {
   constructor(
     protected math: MathService,
     protected winston: WinstonLoggerService,
+    protected nameValidator: NameValidationService,
   ) {
-    super(math, winston);
+    super(math, winston, nameValidator);
   }
 
+  // select col from tablenaem where expression
   handleSelectStatement(state: TokensParser): ASTSelect {
     const result: ASTSelect = {
       statement: 'select',
@@ -25,13 +28,14 @@ export class DMLParser extends StatementParser {
     result['statement'] = this.eat(state);
     // search selected columns
     // [select] [col1] [,] [col2] [;]
-    for (; state.cursor < state.tokens.length; ) {
+    while (state.cursor < state.tokens.length) {
       if (reserved_keywords.includes(this.peek(state))) {
         break;
       } else {
         const columnName = this.eat(state);
         if (!this.singleCharacters.includes(columnName))
-          columnNames.push(columnName);
+          if (columnName !== '*')  this.nameValidator.validateName(columnName, 'Column Name');
+        columnNames.push(columnName);
       }
     }
     if (columnNames.length === 0) {
@@ -51,7 +55,7 @@ export class DMLParser extends StatementParser {
       result['where'] = this.handleWhereClause(state);
     //if (this.peek(state) === 'group')
     //result['group'] = this.__handleGroubBy(state);
-    this.winston.info(`parsed select statement: ${result}`)
+    this.winston.info(`parsed select statement: ${result}`, 'DMLParser');
     return result;
   }
 
@@ -65,7 +69,9 @@ export class DMLParser extends StatementParser {
     result['tablename'] = this.handleFromClause(state);
     result['where'] = this.handleWhereClause(state);
     if (!result['where'])
-      throw new Error('Bad Request Errorr: Delete statement must have a where filter');
+      throw new Error(
+        'Bad Request Errorr: Delete statement must have a where filter',
+      );
     else if (
       (typeof result['where'] === 'object' &&
         result['where'].lhs === result['where'].rhs &&
@@ -75,7 +81,7 @@ export class DMLParser extends StatementParser {
       throw new Error(
         'Bad Request Error: DELETE FROM TABLENAME WHERE true; is not allowed',
       );
-    this.winston.info(`parsed delete statement: ${result}`)
+    this.winston.info(`parsed delete statement: ${result}`, 'DMLParser');
     return result;
   }
 
@@ -92,6 +98,7 @@ export class DMLParser extends StatementParser {
         'Syntax Error: a table must be specified for the update sentence',
       );
     result['tablename'] = this.eat(state);
+    this.nameValidator.validateName(result['tablename']);
     if (this.eat(state) !== 'set')
       throw new Error('Syntax Error: Expected SET keyword');
     while (
@@ -122,7 +129,7 @@ export class DMLParser extends StatementParser {
       if (this.peek(state) === ',') this.eat(state);
     }
     result['where'] = this.handleWhereClause(state);
-    this.winston.info(`parsed update statement: ${result}`)
+    this.winston.info(`parsed update statement: ${result}`, 'DMLParser');
     return result;
   }
 
@@ -179,7 +186,7 @@ export class DMLParser extends StatementParser {
       throw new Error('Syntax Error: columns and values must match in size');
     result.columnsNames = columnsNames;
     result.columnsValues = columnsValues;
-    this.winston.info(`parsed insert statement`)
+    this.winston.info(`parsed insert statement`, 'DMLParser');
     return result;
   }
 }

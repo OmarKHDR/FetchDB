@@ -4,7 +4,6 @@ import { ExprRes } from './math.types';
 export type ASTSelect = {
   statement: string;
   tablename: string;
-  selectAll?: boolean;
   columns: Array<string> | '*';
   where?: ExprRes | string;
 };

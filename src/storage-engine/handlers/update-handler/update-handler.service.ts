@@ -26,7 +26,7 @@ export class UpdateHandlerService {
     columns: Array<string>,
     values: Array<string>,
   ) {
-    this.winston.info(`trying to update columns`);
+    this.winston.info(`trying to update columns`, 'UpdateHandler');
     //for each matched row we will update the values of the object, then append values, and change the prevVersion, prevVersionSize, and the index info
     const rows = await this.readHandler.getMatchedRows(tablename, '*', where);
 
@@ -75,7 +75,7 @@ export class UpdateHandlerService {
         updatedRows.push(row);
       }
     } catch (err) {
-      this.winston.error(`${err}`, 'FileHandler');
+      this.winston.error(`${err}`, 'UpdateHandler');
     } finally {
       resolver('final');
     }
