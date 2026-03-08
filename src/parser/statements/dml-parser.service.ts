@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConsoleLogger, Injectable } from '@nestjs/common';
 import { StatementParser } from './statement-parser.service';
 import { MathService } from '../math/math.service';
 import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
@@ -24,7 +24,7 @@ export class DMLParser extends StatementParser {
       columns: '*',
       tablename: '',
     };
-    const columnNames: string[] = [];
+    let columnNames: string[] | '*' = [];
     result['statement'] = this.eat(state);
     // search selected columns
     // [select] [col1] [,] [col2] [;]
@@ -32,16 +32,19 @@ export class DMLParser extends StatementParser {
       if (reserved_keywords.includes(this.peek(state))) {
         break;
       } else {
-        const columnName = this.eat(state);
-        if (!this.singleCharacters.includes(columnName))
-          if (columnName !== '*')  this.nameValidator.validateName(columnName, 'Column Name');
-        columnNames.push(columnName);
+        const column = this.eat(state);
+        if (column !== ',') {
+          if (column === '*') {
+            columnNames = '*';
+            break;
+          }
+          this.nameValidator.validateName(column, 'Column Name');
+          columnNames.push(column);
+        }
       }
     }
     if (columnNames.length === 0) {
       throw new Error(`Syntax Error: SELECT must have columns selected`);
-    } else if (columnNames.length === 1 && columnNames[0] === '*') {
-      result['columns'] = '*';
     } else {
       result['columns'] = columnNames;
     }
@@ -55,10 +58,39 @@ export class DMLParser extends StatementParser {
       result['where'] = this.handleWhereClause(state);
     //if (this.peek(state) === 'group')
     //result['group'] = this.__handleGroubBy(state);
-    this.winston.info(`parsed select statement: ${result}`, 'DMLParser');
+    if (this.peek(state) === 'order')
+      result['orderBy'] = this.handleOrderClause(state);
+    this.winston.info(`parsed select statement:`, 'DMLParser');
+    console.log(result);
     return result;
   }
 
+  handleOrderClause(state) {
+    this.eat(state);
+    const result = {
+      column: '',
+      asc: true,
+      limit: 0,
+    };
+    //check for by
+    let token = this.eat(state);
+    if (token !== 'by')
+      throw new Error(`SyntaxError: Expecting BY and found ${token}`);
+    result['column'] = this.eat(state);
+    this.nameValidator.validateName(result['column']);
+    if (['asc', 'desc'].includes(this.peek(state)))
+      result.asc = this.eat(state) === 'asc';
+    if (this.peek(state) === 'limit') {
+      this.eat(state);
+      const limit = this.eat(state);
+      if (Number.isInteger(Number(limit)))
+        throw new Error(
+          `SyntaxError: Expecting a number after limit found ${limit}`,
+        );
+      result.limit = Number(limit);
+    }
+    return result;
+  }
   //delete
   handleDeleteStatement(state: TokensParser) {
     const result: ASTDelete = {
@@ -68,15 +100,16 @@ export class DMLParser extends StatementParser {
     };
     result['tablename'] = this.handleFromClause(state);
     result['where'] = this.handleWhereClause(state);
+    console.log(result.where);
     if (!result['where'])
       throw new Error(
         'Bad Request Errorr: Delete statement must have a where filter',
       );
     else if (
-      (typeof result['where'] === 'object' &&
-        result['where'].lhs === result['where'].rhs &&
-        result['operator'] === '=') ||
-      (typeof result === 'string' && Boolean(Number(result)))
+      (typeof result['where'] !== 'string' &&
+      result['where'].lhs === result['where'].rhs &&
+      result['where']['operator'] === '=') || 
+      typeof result['where'] === 'string' && result.where !== "''" 
     )
       throw new Error(
         'Bad Request Error: DELETE FROM TABLENAME WHERE true; is not allowed',

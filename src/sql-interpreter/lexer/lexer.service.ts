@@ -23,10 +23,10 @@ export class LexerService {
     let isQouted = false;
     for (let i = 0; i < statement.length; i++) {
       let char = statement[i];
-      if (char === "'" || char === '"') {
-        isQouted = !isQouted;
+      if (char === "'") {
+          isQouted = !isQouted;
       }
-      // name=af"st of  -- 32 "
+      // name="afst of  -- 32 "
       //if char is white space, check if there is a char on buffer and flush it
       if (isQouted) {
         buffer += char;
@@ -47,7 +47,7 @@ export class LexerService {
         continue;
       }
 
-      // >= <= ===
+      
       if (this.BinOp.includes(char)) {
         if (this.BinOp.includes(statement[i + 1])) {
           if (buffer) tokensArray.push(buffer);

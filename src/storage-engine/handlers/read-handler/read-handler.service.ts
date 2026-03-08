@@ -6,8 +6,10 @@ import { TableHandlerService } from '../table-handler.service.ts/table-handler.s
 import { ObjectFilterService } from 'src/storage-engine/helper/object-filter.service';
 import { MathService } from 'src/parser/math/math.service';
 import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
-import { ValidatorService } from 'src/storage-engine/helper/validator.service';
+import { ValidatorService } from 'src/shared/validator.service';
 import { dataVersions } from 'src/storage-engine/types/versions.type';
+import { Order } from 'src/parser/types/trees';
+import { table } from 'console';
 
 @Injectable()
 export class ReadHandlerService {
@@ -144,6 +146,7 @@ export class ReadHandlerService {
       op: string;
       id: number;
     },
+    orderBy?: Order,
   ) {
     if (
       !this.fileHandler.tables[tablename] ||
@@ -176,21 +179,40 @@ export class ReadHandlerService {
       startPos = 0;
       endPos = indexCount;
     }
+    //reading the rows by start and end of the indexes
     const rowsBuffer = await this.tableHandler.readRowsBuffer(
       this.fileHandler.tables[tablename],
       startPos,
       endPos,
     );
-    const resRows: Array<object> = [];
-    rowsBuffer.forEach((row) => {
+    //for each row we read and convert into a readable format
+    const rowsObj: Array<Record<string, any>> = [];
+    for (const row of rowsBuffer) {
       const rowObj = this.bufferManager.tableBufferToObject(
         { buffer: row, bytesRead: row.length },
         this.fileHandler.schemaObj[tablename],
       );
       if (rowObj['deleted']) {
-        return;
+        continue;
       }
+      rowsObj.push(rowObj);
+    }
 
+    if (orderBy) {
+      if (orderBy.column in rowsObj[0] || rowsObj.length === 0)
+        rowsObj.sort((a, b) => {
+          const aStr = String(a[orderBy.column]);
+          const bStr = String(b[orderBy.column]);
+          if (orderBy.asc) return aStr.localeCompare(bStr);
+          else return aStr.localeCompare(bStr);
+        });
+      else
+        throw new Error(
+          `Reference Error: Couldn't find the relation ${orderBy.column}`,
+        );
+    }
+    const resRows: Array<Record<string, any>> = [];
+    for (const rowObj of rowsObj) {
       const filteredRowObj = this.objectFilter.filterObject(
         tablename,
         rowObj,
@@ -202,7 +224,7 @@ export class ReadHandlerService {
       } else if (this.math.compare(where, rowObj)) {
         resRows.push(filteredRowObj);
       }
-    });
+    }
 
     return resRows;
   }
@@ -241,7 +263,8 @@ export class ReadHandlerService {
     if (matches.length && ignoreId) {
       if (matches.length === 1 && matches[0]['id'] === ignoreId) return false;
       return true;
-    } else return false;
+    } else if (matches.length) return true;
+    else return false;
   }
 
   async getRowHistory(tablename: string, id: number) {

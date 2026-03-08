@@ -13,6 +13,9 @@ import { UpdateHandlerService } from './handlers/update-handler/update-handler.s
 import { DeleteHandlerService } from './handlers/delete-handler/delete-handler.service';
 import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
 import { promisify } from 'util';
+import { Readline } from 'readline/promises';
+import { open } from 'fs/promises';
+import path from 'path';
 @Injectable()
 export class StorageEngineService {
   constructor(
@@ -58,6 +61,7 @@ export class StorageEngineService {
       ASTtree.columns,
       ASTtree.where,
       options,
+      ASTtree.orderBy,
     );
   }
 
@@ -91,17 +95,12 @@ export class StorageEngineService {
   }
 
   async getQueryHistory() {
-    const fields = [
-      'statementType',
-      'schemaVersion',
-      'context',
-      'timestamp',
-      'level',
-      'message',
-    ];
-    const querylogs = promisify(this.winston.logger.query).bind(
-      this.winston.logger,
-    );
-    return await querylogs({ fields });
+    const result: Array<object> = [];
+    const logsPath = path.join(process.cwd(), 'logs', 'query.logs');
+    const logsFile = await open(logsPath);
+    for await (const line of logsFile.readLines()) {
+      result.push(JSON.parse(line));
+    }
+    return result
   }
 }

@@ -80,6 +80,7 @@ export class SqlInterpreterService {
       case 'select':
       case 'delete':
       case 'update':
+        throw new Error('Interpreter Error: This is a DML statement call the /execute/dml endpoint')
       default:
         throw new Error(
           `Not Implemented Error: This statement not implemented yet ${ASTobj.statement}`,

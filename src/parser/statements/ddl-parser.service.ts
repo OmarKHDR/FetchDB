@@ -2,11 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { StatementParser } from './statement-parser.service';
 import { MathService } from '../math/math.service';
 import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
-import { Column, Type } from 'src/storage-engine/types/column.type';
+import { Column, Type, Types } from 'src/storage-engine/types/column.type';
 import { TokensParser } from '../types/token-parser.type';
 import { ASTCreate } from '../types/trees';
 import { reserved_keywords } from 'src/shared/constants/keywords.constants';
 import { NameValidationService } from 'src/shared/name-validation.service';
+import { ValidatorService } from 'src/shared/validator.service';
 
 @Injectable()
 export class DDLParser extends StatementParser {
@@ -14,6 +15,7 @@ export class DDLParser extends StatementParser {
     protected math: MathService,
     protected winston: WinstonLoggerService,
     protected nameValidator: NameValidationService,
+    protected validator: ValidatorService,
   ) {
     super(math, winston, nameValidator);
   }
@@ -58,7 +60,7 @@ export class DDLParser extends StatementParser {
         name: this.eat(state),
         type: this.eat(state) as Type,
       };
-      this.nameValidator.validateName(column.name, 'Column Name')
+      this.nameValidator.validateName(column.name, 'Column Name');
       if (column.type === 'varchar') {
         if (this.eat(state) === '(') {
           const limit = this.eat(state);
@@ -72,6 +74,9 @@ export class DDLParser extends StatementParser {
               `Syntax Error: Expected closed pranthesis but found ${this.eat(state)}`,
             );
         }
+      } else {
+        if (!Types.includes(column.type))
+          throw new Error(`Syntax Error: type ${column.type} is not known`);
       }
       column.IsNullable = true;
       column.IsUnique = false;
@@ -81,8 +86,8 @@ export class DDLParser extends StatementParser {
         this.peek(state) !== ',' &&
         this.peek(state) !== ')'
       ) {
-        const val = this.eat(state);
-        if (val === 'primary') {
+        const token = this.eat(state);
+        if (token === 'primary') {
           const pk = this.eat(state);
           if (pk === 'key') {
             column.IsNullable = false;
@@ -90,23 +95,18 @@ export class DDLParser extends StatementParser {
             column.IsPK = true;
           } else throw new Error(`Syntax Error: expected KEY found ${pk}`);
         }
-        if (val === 'not') {
+        if (token === 'not') {
           const nullable = this.eat(state);
           if (nullable === 'null') column.IsNullable = false;
           else throw new Error(`Syntax Error: expected NULL found ${nullable}`);
         }
-        if (val === 'default') {
+        if (column.type === 'serial') column.serial = 0;
+        if (token === 'unique') column.IsUnique = true;
+        if (token === 'default') {
           const defaultVal = this.eat(state);
-          if (['float', 'serial', 'int'].includes(column.type)) {
-            if (isNaN(Number(defaultVal))) {
-              throw new Error(
-                `Syntax Error: Expected numeric default for ${column.type}`,
-              );
-            }
-            if (column.type === 'serial') {
-              column.serial = 0;
-            }
-          }
+          if (column.type === 'serial')
+            throw new Error('Can not assign default value to type serial');
+          this.validator.validateType(column.type, defaultVal);
           if (defaultVal !== ',' && defaultVal !== ')') {
             column.default = defaultVal;
           } else

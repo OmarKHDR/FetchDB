@@ -6,6 +6,13 @@ export type ASTSelect = {
   tablename: string;
   columns: Array<string> | '*';
   where?: ExprRes | string;
+  orderBy?: Order;
+};
+
+export type Order = {
+  column: string;
+asc: boolean;
+  limit?: number;
 };
 
 export type ASTCreate = {

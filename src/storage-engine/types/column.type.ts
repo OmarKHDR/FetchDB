@@ -5,6 +5,15 @@ export type Type =
   | 'varchar'
   | 'timestamp'
   | 'offset-serial';
+
+export const Types = [
+  'serial',
+  'int',
+  'float',
+  'varchar',
+  'timestamp',
+  'offset-serial',
+];
 export type Column = {
   name: string;
   type: Type;

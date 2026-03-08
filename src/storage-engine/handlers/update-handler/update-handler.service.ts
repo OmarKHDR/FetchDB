@@ -4,7 +4,7 @@ import { ExprRes } from 'src/parser/types/math.types';
 import { WinstonLoggerService } from 'src/winston-logger/winston-logger.service';
 import { ReadHandlerService } from '../read-handler/read-handler.service';
 import { MutexService } from 'src/storage-engine/mutex/mutex.service';
-import { ValidatorService } from 'src/storage-engine/helper/validator.service';
+import { ValidatorService } from 'src/shared/validator.service';
 import { BufferManagerService } from 'src/storage-engine/buffer-manager/buffer-manager.service';
 import { TableHandlerService } from '../table-handler.service.ts/table-handler.service';
 
@@ -14,10 +14,10 @@ export class UpdateHandlerService {
     private fileHandler: FileHandlerService,
     private winston: WinstonLoggerService,
     private readHandler: ReadHandlerService,
-		private mutex: MutexService,
-		private validator: ValidatorService,
-		private bufferManager: BufferManagerService,
-		private tableHandler: TableHandlerService,
+    private mutex: MutexService,
+    private validator: ValidatorService,
+    private bufferManager: BufferManagerService,
+    private tableHandler: TableHandlerService,
   ) {}
 
   async updateRows(
@@ -62,7 +62,9 @@ export class UpdateHandlerService {
           index[0].index,
           index[0].rowLength,
         );
-        const dataOffset = (await this.fileHandler.tables[tablename].table.stat()).size;
+        const dataOffset = (
+          await this.fileHandler.tables[tablename].table.stat()
+        ).size;
         await this.fileHandler.tables[tablename].table.appendFile(buff);
         await this.replaceIndex(
           tablename,

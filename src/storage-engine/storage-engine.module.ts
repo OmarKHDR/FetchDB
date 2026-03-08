@@ -4,7 +4,6 @@ import { BufferManagerService } from './buffer-manager/buffer-manager.service';
 import { WinstonLoggerModule } from '../winston-logger/winston-logger.module';
 import { MutexService } from './mutex/mutex.service';
 import { ParserModule } from 'src/parser/parser.module';
-import { ValidatorService } from './helper/validator.service';
 import { ObjectFilterService } from './helper/object-filter.service';
 import { SharedModule } from 'src/shared/shared.module';
 import { HandlersModule } from './handlers/handlers.module';
@@ -15,7 +14,6 @@ import { HandlersModule } from './handlers/handlers.module';
     StorageEngineService,
     BufferManagerService,
     MutexService,
-    ValidatorService,
     ObjectFilterService,
   ],
   exports: [StorageEngineService],

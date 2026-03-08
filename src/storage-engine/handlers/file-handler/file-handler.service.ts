@@ -42,7 +42,7 @@ export class FileHandlerService {
             (await this.tables[table].index.stat()).size / 12,
           );
           this.winston.info(
-            `setting the column ${column.name} start to ${column.serial}`, 'FileHandler'
+            `setting the column ${column.name} at table ${table} start to ${column.serial}`, 'FileHandler'
           );
         }
       }

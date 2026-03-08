@@ -7,11 +7,8 @@ export class ObjectFilterService {
     rowObj: Record<string, string>,
     columns: Array<string> | '*',
   ) {
-    let filteredRowObj = {...rowObj};
-    if (typeof columns === 'string' && columns === '*') {
-      delete filteredRowObj['prevVersion'];
-      delete filteredRowObj['prevVersionSize'];
-    } else {
+    let filteredRowObj = {};
+    if (typeof columns !== 'string') {
       for (const column of columns) {
         if (rowObj[column] === undefined)
           throw new Error(
@@ -19,6 +16,10 @@ export class ObjectFilterService {
           );
         filteredRowObj[column] = rowObj[column];
       }
+    } else {
+      filteredRowObj = { ...rowObj };
+      delete filteredRowObj['prevVersion'];
+      delete filteredRowObj['prevVersionSize'];
     }
     return filteredRowObj;
   }

@@ -14,25 +14,32 @@ export class ParserService {
     const state = { tokens, cursor: 0 };
     state.tokens = tokens;
     state.cursor = 0;
-    if (tokens.at(-1) !== ';') {
-      throw new Error(`Syntax Error: queries must end with ';'`);
-    }
+
     const statementType = tokens[0];
+    let result;
     switch (statementType) {
       case 'select':
-        return this.dmlParser.handleSelectStatement(state);
+        result = this.dmlParser.handleSelectStatement(state);
+        break;
       case 'insert':
-        return this.dmlParser.handleInsertStatement(state);
+        result = this.dmlParser.handleInsertStatement(state);
+        break
       case 'delete':
-        return this.dmlParser.handleDeleteStatement(state);
+        result = this.dmlParser.handleDeleteStatement(state);
+        break;
       case 'update':
-        return this.dmlParser.handleUpdateStatement(state);
+        result = this.dmlParser.handleUpdateStatement(state);
+        break;
       case 'create':
-        return this.ddlParser.handleCreateStatement(state);
+        result = this.ddlParser.handleCreateStatement(state);
+        break;
       default:
         throw new Error(
           `Not Implemented Error: this statment wasn't implemeneted yet ${statementType}`,
         );
     }
+    if (state.tokens[state.cursor] !== ';')
+          throw new Error(`Syntax Error: Expected ; and found ${state.tokens[state.cursor]}`);
+    return result;  
   }
 }

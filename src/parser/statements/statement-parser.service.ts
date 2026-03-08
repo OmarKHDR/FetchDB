@@ -31,15 +31,18 @@ export class StatementParser {
     while (state.cursor < state.tokens.length) {
       const token = this.peek(state);
       if (reserved_keywords.includes(token)) break;
-      this.eat(state);
       if (token === ';') break;
-      if (token === ',') continue;
-      else {
-        this.nameValidator.validateName(token, 'Table Name')
+      if (token === ',') {
+        this.eat(state);
+        continue;
+      } else {
+        this.nameValidator.validateName(token, 'Table Name');
         tables.push(token);
+        this.eat(state);
       }
     }
-    if (tables.length === 0) throw new Error('Syntax Error: Missing table name');
+    if (tables.length === 0)
+      throw new Error('Syntax Error: Missing table name');
     if (tables.length > 1)
       throw new Error('Not Implemented Error: Cross Joins not implemented yet');
     return tables[0];

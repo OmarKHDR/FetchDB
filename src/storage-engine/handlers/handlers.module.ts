@@ -12,7 +12,7 @@ import { BufferManagerService } from '../buffer-manager/buffer-manager.service';
 import { WinstonLoggerModule } from 'src/winston-logger/winston-logger.module';
 import { MutexService } from '../mutex/mutex.service';
 import { ObjectFilterService } from '../helper/object-filter.service';
-import { ValidatorService } from '../helper/validator.service';
+import { ValidatorService } from '../../shared/validator.service';
 import { SharedModule } from 'src/shared/shared.module';
 
 @Module({

@@ -9,10 +9,10 @@ export class ValidatorService {
     try {
       switch (t) {
         case 'float':
-          if (isNaN(parseFloat(value))) throw new Error;
+          if (isNaN(parseFloat(value))) throw new Error(`Type Error: expected float`);
           return;
         case 'int':
-          if (isNaN(parseInt(value))) throw new Error;
+          if (isNaN(parseInt(value))) throw new Error(`Type Error: expected integer`);
           return;
         case 'serial':
           BigInt(value);
@@ -20,7 +20,7 @@ export class ValidatorService {
         case 'timestamp':
           value = this.stringManip.removeQoutesIfExists(value);
           if (new Date(value).getTime() > 0) return;
-          else throw new Error('');
+          else throw new Error(`Type Error: expected valid timestamp`);
         case 'varchar':
           return;
       }

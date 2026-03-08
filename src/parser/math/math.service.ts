@@ -65,6 +65,7 @@ export class MathService {
 
   __handleLHS(state: TokensParser) {
     const lhs = this.peek(state);
+    if (lhs === ';') return '';
     if (lhs === '(') return this.__handlePranthesis(state);
     // then the lhs either a number, a string, a column, NOT
     // string and columns are stored as is,
@@ -124,7 +125,9 @@ export class MathService {
       const typed = this.convertToType(where);
       if (typed.type === 'column') {
         if (!(typed.value in rowObj)) {
-          throw new Error(`Reference Error: can't find relation ${typed.value}`);
+          throw new Error(
+            `Reference Error: can't find relation ${typed.value}`,
+          );
         }
         if (
           typeof rowObj[typed.value] === 'string' &&
@@ -139,6 +142,12 @@ export class MathService {
     const left = this.compare(where.lhs, rowObj);
     const right = this.compare(where.rhs, rowObj);
     switch (where.operator) {
+      case '<>':
+        return left !== right;
+      case '<=':
+        return left <= right;
+      case '>=':
+        return left >= right;
       case '=':
         return left === right;
       case '>':
@@ -160,7 +169,9 @@ export class MathService {
       case '/':
         return left / right;
       default:
-        throw new Error(`Syntax Error: ${where.operator} operator wasnt implemented yet`);
+        throw new Error(
+          `Syntax Error: ${where.operator} operator wasnt implemented yet`,
+        );
     }
   }
 }
