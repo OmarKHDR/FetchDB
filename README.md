@@ -53,6 +53,8 @@ get the schema history in a list, each change to the DB schema with adding new t
 `POST /schema/version`
 change the current version of the schema to another one, currently it will only hide the tables that created in the next versions or re-show them
 
+`GET /query/history`
+return all the queries that was successfully interpreted and entered the execution phase
 
 
 ## License

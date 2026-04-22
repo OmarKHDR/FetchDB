@@ -118,13 +118,14 @@ export class BufferManagerService {
       ) {
         //assuming any row would begin with a serial
         this.winston.info(
-          `trying to add ${newData[column.name]} into ${column.name}`, 'BufferManager'
+          `trying to add ${newData[column.name]} into ${column.name}`,
+          'BufferManager',
         );
         result.push(
           this.__getBufferByType(
             newData[column.name] ?? oldData[column.name],
             column.type,
-            column.serial,
+            newData[column.name] ? column.serial : Number(oldData[column.name]) + 1,
           ),
         );
       }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { SqlInterpreterService } from './sql-interpreter/sql-interpreter.service';
 import { WinstonLoggerService } from './winston-logger/winston-logger.service';
 import { StorageEngineService } from './storage-engine/storage-engine.service';
@@ -138,17 +138,16 @@ export class AppController {
   @ApiOperation({
     description: 'get the entire history of changes of a specific row ',
   })
-  @ApiBody({ type: selectRowDto })
-  @Post('/data/history')
-  async getDataHistory(@Body() body: selectRowDto) {
+  @Get('/data/history')
+  async getDataHistory(@Query() param: selectRowDto) {
     this.winston.info(
-      `hit /data/history endpoint with Query: table=${body.tablename} and id=${body.id}`,
+      `hit /data/history endpoint with Query: table=${param.tablename} and id=${param.id}`,
       'AppController',
     );
     try {
       return {
         success: true,
-        data: await this.storage.getRowHistory(body.tablename, body.id),
+        data: await this.storage.getRowHistory(param.tablename, param.id),
       };
     } catch (err) {
       this.winston.error(err.stack, 'AppController');
